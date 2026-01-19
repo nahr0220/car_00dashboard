@@ -62,7 +62,7 @@ st.markdown(
 # 3. 데이터 로드 & 공통 전처리
 @st.cache_data
 def load_data_v2():
-    # 현재 파일 위치 기준 절대 경로 확보
+    # 현재 실행 파일의 경로를 기준으로 설정
     base_path = Path(__file__).parent
     data_path = base_path / "data"
 
@@ -70,20 +70,22 @@ def load_data_v2():
         st.error(f"❌ 'data' 폴더를 찾을 수 없습니다. 경로: {data_path.absolute()}")
         st.stop()
 
-    # 폴더 내 모든 파일 리스트업
+    # 폴더 내 모든 파일 이름을 가져옵니다.
     all_files = os.listdir(data_path)
     
-    # 1) CSV 파일 로드: 'output_'로 시작하고 '.csv'로 끝나는 모든 파일 찾기
+    # 1) CSV 파일 찾기: 파일명에 'output_'가 포함되고 '.csv'로 끝나는 것만 필터링 (한글 무관)
     csv_files = [f for f in all_files if f.lower().startswith("output_") and f.lower().endswith(".csv")]
     
     if not csv_files:
-        st.error(f"❌ CSV 파일을 찾을 수 없습니다. 폴더 내 파일: {all_files}")
+        st.error(f"❌ CSV 파일을 찾을 수 없습니다. (현재 폴더 내 파일들: {all_files})")
         st.stop()
 
     df_list = []
+    # 파일명 순서대로 정렬하여 로드
     for f in sorted(csv_files):
+        file_full_path = data_path / f
         # 한글 깨짐 방지를 위해 utf-8-sig 사용
-        df_q = pd.read_csv(data_path / f, encoding="utf-8-sig")
+        df_q = pd.read_csv(file_full_path, encoding="utf-8-sig")
         df_list.append(df_q)
 
     df = pd.concat(df_list, ignore_index=True)
@@ -93,7 +95,7 @@ def load_data_v2():
     ap_files = [f for f in all_files if "ap" in f.lower() and f.lower().endswith((".xlsx", ".xls"))]
     
     if not ap_files:
-        st.error(f"❌ AP 엑셀 파일을 찾을 수 없습니다. 폴더 내 파일: {all_files}")
+        st.error(f"❌ AP 엑셀 파일을 찾을 수 없습니다. (현재 폴더 내 파일들: {all_files})")
         st.stop()
         
     df_ap = pd.read_excel(data_path / ap_files[0], skiprows=1)
@@ -115,7 +117,7 @@ def load_data_v2():
 try:
     df, df_ap, period_options, period_to_label = load_data_v2()
 except Exception as e:
-    st.error(f"🔥 데이터를 읽는 중 오류가 발생했습니다: {e}")
+    st.error(f"🔥 데이터를 읽는 중 예상치 못한 오류가 발생했습니다: {e}")
     st.stop()
 
 # 데이터 호출
