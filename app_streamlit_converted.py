@@ -61,62 +61,64 @@ st.markdown(
 # ========================================
 # 3. 데이터 로드 & 공통 전처리
 @st.cache_data
-def load_data():
-    # 1) 분기별 이전등록 데이터 (Git에 포함된 CSV들)
-    data_path = Path("data")
-    files = sorted(data_path.glob("output_*분기.csv"))
+def load_data_v2():
+    base_path = Path(__file__).parent
+    data_path = base_path / "data"
+    
+    # [방어 1] 폴더 확인
+    if not data_path.exists():
+        st.error(f"❌ 'data' 폴더를 찾을 수 없습니다. (경로: {data_path})")
+        return None, None, None, None
 
-    if not files:
-        raise FileNotFoundError("분기별 데이터 파일이 없습니다.")
+    all_files = os.listdir(data_path)
+    csv_files = [f for f in all_files if f.lower().startswith("output_") and f.lower().endswith(".csv")]
+    
+    # [방어 2] 파일 확인
+    if not csv_files:
+        st.error(f"❌ CSV 파일이 하나도 없습니다. 현재 폴더 파일: {all_files}")
+        return None, None, None, None
 
     df_list = []
-    for f in files:
-        df_q = pd.read_csv(f, encoding="utf-8-sig")
-        df_list.append(df_q)
+    for f in sorted(csv_files):
+        try:
+            tmp = pd.read_csv(data_path / f, encoding="utf-8-sig")
+            tmp.columns = tmp.columns.str.strip() # 공백 제거
+            df_list.append(tmp)
+        except Exception as e:
+            st.error(f"❌ {f} 파일을 읽는 중 에러: {e}")
 
     df = pd.concat(df_list, ignore_index=True)
 
-    # 컬럼 정리 (안전장치)
-    df.columns = df.columns.str.strip()
-
-    # 2) AP 데이터 (엑셀은 그대로 사용)
-    df_ap = pd.read_excel(
-        "data/AP Sales Summary.xlsx",
-        skiprows=1
-    )
+    # AP 데이터 로드
+    ap_files = [f for f in all_files if "ap" in f.lower() and f.lower().endswith((".xlsx", ".xls"))]
+    if not ap_files:
+        st.error("❌ AP 엑셀 파일을 찾을 수 없습니다.")
+        return None, None, None, None
+        
+    df_ap = pd.read_excel(data_path / ap_files[0], skiprows=1)
     df_ap.columns = ["년도", "월", "AP"]
     df_ap = df_ap[df_ap["년도"] >= 2024].copy()
 
-    # 연월번호 / 연월라벨
     for d in (df, df_ap):
         d["연월번호"] = d["년도"] * 100 + d["월"]
-        d["연월라벨"] = (
-            d["년도"].astype(str)
-            + "-"
-            + d["월"].astype(str).str.zfill(2)
-        )
+        d["연월라벨"] = d["년도"].astype(str) + "-" + d["월"].astype(str).str.zfill(2)
 
-    periods = (
-        df[["연월번호", "연월라벨"]]
-        .drop_duplicates()
-        .sort_values("연월번호")
-    )
-
-    period_options = [
-        {"label": r["연월라벨"], "value": int(r["연월번호"])}
-        for _, r in periods.iterrows()
-    ]
-
-    period_to_label = (
-        periods.set_index("연월번호")["연월라벨"]
-        .astype(str)
-        .to_dict()
-    )
+    periods = df[["연월번호", "연월라벨"]].drop_duplicates().sort_values("연월번호")
+    period_options = [{"label": r["연월라벨"], "value": int(r["연월번호"])} for _, r in periods.iterrows()]
+    period_to_label = periods.set_index("연월번호")["연월라벨"].astype(str).to_dict()
 
     return df, df_ap, period_options, period_to_label
 
+# 데이터 로드 실행
+df, df_ap, period_options, period_to_label = load_data_v2()
 
-df, df_ap, period_options, period_to_label = load_data()
+# [방어 3] 데이터가 비었을 때 앱 중단 방지
+if df is None or not period_options:
+    st.warning("⚠️ 데이터를 불러오지 못했습니다. 위 에러 메시지를 확인하세요.")
+    st.stop()
+
+# [방어 4] 기본 선택값 안전하게 지정
+default_index = len(period_options) - 1 if period_options else 0
 
 # 데이터 로드 실패 시 중단
 if df is None:
