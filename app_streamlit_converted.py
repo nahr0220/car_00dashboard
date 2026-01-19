@@ -59,16 +59,20 @@ st.markdown(
 # ========================================
 # 3. 데이터 로드 & 공통 전처리
 # ========================================
+
+CSV_URL = "https://drive.google.com/uc?export=download&id=1TGl7syMbFbjYi0UbSDKC-DPGa1OF7Ff4"
+
+
 @st.cache_data
 def load_data():
-    def load_data():
-        CSV_URL = "https://drive.google.com/1TGl7syMbFbjYi0UbSDKC-DPGa1OF7Ff4"
-        return pd.read_csv(CSV_URL)
-    df = load_data()
+    # 1) 이전등록 데이터 (Google Drive)
+    df = pd.read_csv(CSV_URL)
+
+    # 2) AP 데이터 (Git에 포함된 엑셀)
     df_ap = pd.read_excel(
         "data/AP Sales Summary.xlsx",
         skiprows=1
-)
+    )
     df_ap.columns = ["년도", "월", "AP"]
 
     # 2024년 이후만
@@ -86,10 +90,12 @@ def load_data():
         .drop_duplicates()
         .sort_values("연월번호")
     )
+
     period_options = [
         {"label": r["연월라벨"], "value": int(r["연월번호"])}
         for _, r in periods.iterrows()
     ]
+
     period_to_label = (
         periods.set_index("연월번호")["연월라벨"].astype(str).to_dict()
     )
@@ -98,6 +104,7 @@ def load_data():
 
 
 df, df_ap, period_options, period_to_label = load_data()
+
 
 # ========================================
 # 4. 제목
