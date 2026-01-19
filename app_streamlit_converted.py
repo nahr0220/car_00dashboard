@@ -62,57 +62,61 @@ st.markdown(
 # 3. 데이터 로드 & 공통 전처리
 @st.cache_data
 def load_data_v2():
-    try:
-        # 파일 경로 설정
-        base_path = Path(__file__).parent
-        data_path = base_path / "data"
+    # 현재 파일 위치 기준 절대 경로 확보
+    base_path = Path(__file__).parent
+    data_path = base_path / "data"
+
+    if not data_path.exists():
+        st.error(f"❌ 'data' 폴더를 찾을 수 없습니다. 경로: {data_path.absolute()}")
+        st.stop()
+
+    # 폴더 내 모든 파일 리스트업
+    all_files = os.listdir(data_path)
+    
+    # 1) CSV 파일 로드: 'output_'로 시작하고 '.csv'로 끝나는 모든 파일 찾기
+    csv_files = [f for f in all_files if f.lower().startswith("output_") and f.lower().endswith(".csv")]
+    
+    if not csv_files:
+        st.error(f"❌ CSV 파일을 찾을 수 없습니다. 폴더 내 파일: {all_files}")
+        st.stop()
+
+    df_list = []
+    for f in sorted(csv_files):
+        # 한글 깨짐 방지를 위해 utf-8-sig 사용
+        df_q = pd.read_csv(data_path / f, encoding="utf-8-sig")
+        df_list.append(df_q)
+
+    df = pd.concat(df_list, ignore_index=True)
+    df.columns = df.columns.str.strip()
+
+    # 2) AP 데이터 로드: 파일명에 'AP'가 들어있는 엑셀 파일 찾기
+    ap_files = [f for f in all_files if "ap" in f.lower() and f.lower().endswith((".xlsx", ".xls"))]
+    
+    if not ap_files:
+        st.error(f"❌ AP 엑셀 파일을 찾을 수 없습니다. 폴더 내 파일: {all_files}")
+        st.stop()
         
-        # 1. 폴더 존재 확인
-        if not data_path.exists():
-            st.error(f"❌ 'data' 폴더를 찾을 수 없습니다. 경로: {data_path.absolute()}")
-            return None, None, None, None
+    df_ap = pd.read_excel(data_path / ap_files[0], skiprows=1)
+    df_ap.columns = ["년도", "월", "AP"]
+    df_ap = df_ap[df_ap["년도"] >= 2024].copy()
 
-        # 2. 파일 목록 확인 (한글 인코딩 방지)
-        all_files = os.listdir(data_path)
-        csv_files = [f for f in all_files if f.startswith("output_") and f.endswith(".csv")]
-        
-        if not csv_files:
-            st.error(f"❌ 'output_'로 시작하는 CSV 파일이 없습니다. 폴더 내 파일: {all_files}")
-            return None, None, None, None
+    # 연월번호 / 연월라벨 생성
+    for d in (df, df_ap):
+        d["연월번호"] = d["년도"] * 100 + d["월"]
+        d["연월라벨"] = d["년도"].astype(str) + "-" + d["월"].astype(str).str.zfill(2)
 
-        # 3. CSV 로드
-        df_list = []
-        for f in sorted(csv_files):
-            df_q = pd.read_csv(data_path / f, encoding="utf-8-sig")
-            df_list.append(df_q)
-        
-        df = pd.concat(df_list, ignore_index=True)
-        df.columns = df.columns.str.strip()
+    periods = df[["연월번호", "연월라벨"]].drop_duplicates().sort_values("연월번호")
+    period_options = [{"label": r["연월라벨"], "value": int(r["연월번호"])} for _, r in periods.iterrows()]
+    period_to_label = periods.set_index("연월번호")["연월라벨"].astype(str).to_dict()
 
-        # 4. AP 데이터 로드
-        ap_files = [f for f in all_files if "AP Sales Summary" in f and f.endswith((".xlsx", ".xls"))]
-        if not ap_files:
-            st.error(f"❌ AP 엑셀 파일이 없습니다. 폴더 내 파일: {all_files}")
-            return None, None, None, None
-            
-        df_ap = pd.read_excel(data_path / ap_files[0], skiprows=1)
-        df_ap.columns = ["년도", "월", "AP"]
-        df_ap = df_ap[df_ap["년도"] >= 2024].copy()
+    return df, df_ap, period_options, period_to_label
 
-        # 5. 전처리
-        for d in (df, df_ap):
-            d["연월번호"] = d["년도"] * 100 + d["월"]
-            d["연월라벨"] = d["년도"].astype(str) + "-" + d["월"].astype(str).str.zfill(2)
-
-        periods = df[["연월번호", "연월라벨"]].drop_duplicates().sort_values("연월번호")
-        period_options = [{"label": r["연월라벨"], "value": int(r["연월번호"])} for _, r in periods.iterrows()]
-        period_to_label = periods.set_index("연월번호")["연월라벨"].astype(str).to_dict()
-
-        return df, df_ap, period_options, period_to_label
-
-    except Exception as e:
-        st.error(f"🔥 코드 실행 중 예상치 못한 에러 발생: {e}")
-        return None, None, None, None
+# 데이터 로드 실행
+try:
+    df, df_ap, period_options, period_to_label = load_data_v2()
+except Exception as e:
+    st.error(f"🔥 데이터를 읽는 중 오류가 발생했습니다: {e}")
+    st.stop()
 
 # 데이터 호출
 df, df_ap, period_options, period_to_label = load_data_v2()
