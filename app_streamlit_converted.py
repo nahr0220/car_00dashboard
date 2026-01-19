@@ -60,72 +60,70 @@ st.markdown(
 
 # ========================================
 # 3. 데이터 로드 & 공통 전처리
+# [디버깅] 현재 서버 환경의 파일 목록을 강제로 출력해서 확인
+st.write("### 🔍 서버 파일 시스템 체크")
+base_path = Path(__file__).parent
+data_path = base_path / "data"
+
+if not data_path.exists():
+    st.error(f"❌ 'data' 폴더가 서버에 없습니다. 현재 위치: {os.getcwd()}")
+    st.stop()
+else:
+    st.success(f"✅ 'data' 폴더 확인됨. 내부 파일: {os.listdir(data_path)}")
+
 @st.cache_data
 def load_data_v2():
     try:
-        base_path = Path(__file__).parent
-        data_path = base_path / "data"
-        
-        if not data_path.exists():
-            st.error(f"❌ 'data' 폴더가 없습니다. 경로: {data_path}")
-            return None, None, None, None
-
         all_files = os.listdir(data_path)
+        # 한글 직접 입력 없이 'output_'으로 시작하는 모든 CSV 합치기
         csv_files = [f for f in all_files if f.lower().startswith("output_") and f.lower().endswith(".csv")]
         
         if not csv_files:
-            st.error(f"❌ CSV 파일을 찾을 수 없습니다. 폴더 내 파일: {all_files}")
-            return None, None, None, None
+            raise FileNotFoundError("CSV 파일을 하나도 찾지 못했습니다.")
 
         df_list = []
         for f in sorted(csv_files):
-            # 인코딩 및 공백 제거 처리
+            # 인코딩 에러 방지 및 컬럼 공백 제거
             tmp = pd.read_csv(data_path / f, encoding="utf-8-sig")
-            tmp.columns = tmp.columns.str.strip() # 컬럼명 공백 제거
-            
-            # 필수 컬럼 체크
-            required = ["년도", "월", "중고차시장", "유효시장", "마케팅"]
-            for col in required:
-                if col not in tmp.columns:
-                    st.error(f"❌ 파일 '{f}'에 '{col}' 컬럼이 없습니다. 현재 컬럼: {list(tmp.columns)}")
-                    st.stop()
+            tmp.columns = tmp.columns.str.strip()
             df_list.append(tmp)
 
-        df = pd.concat(df_list, ignore_index=True)
-
-        # AP 데이터 로드
+        full_df = pd.concat(df_list, ignore_index=True)
+        
+        # AP 데이터 (파일명에 'AP' 포함된 엑셀)
         ap_files = [f for f in all_files if "ap" in f.lower() and f.lower().endswith((".xlsx", ".xls"))]
         if not ap_files:
-            st.error("❌ AP 엑셀 파일을 찾을 수 없습니다.")
-            return None, None, None, None
+            raise FileNotFoundError("AP 엑셀 파일을 찾지 못했습니다.")
             
         df_ap = pd.read_excel(data_path / ap_files[0], skiprows=1)
         df_ap.columns = ["년도", "월", "AP"]
         df_ap = df_ap[df_ap["년도"] >= 2024].copy()
 
-        for d in (df, df_ap):
+        # 전처리
+        for d in (full_df, df_ap):
             d["연월번호"] = d["년도"] * 100 + d["월"]
             d["연월라벨"] = d["년도"].astype(str) + "-" + d["월"].astype(str).str.zfill(2)
 
-        periods = df[["연월번호", "연월라벨"]].drop_duplicates().sort_values("연월번호")
+        periods = full_df[["연월번호", "연월라벨"]].drop_duplicates().sort_values("연월번호")
         period_options = [{"label": r["연월라벨"], "value": int(r["연월번호"])} for _, r in periods.iterrows()]
+        
+        if not period_options:
+            raise ValueError("데이터 로드 후 생성된 기간 옵션이 없습니다.")
+
         period_to_label = periods.set_index("연월번호")["연월라벨"].astype(str).to_dict()
 
-        return df, df_ap, period_options, period_to_label
+        return full_df, df_ap, period_options, period_to_label
 
     except Exception as e:
-        st.error(f"🔥 데이터 로딩 중 치명적 오류: {e}")
+        # 에러 발생 시 화면에 에러 종류를 직접 뿌림
+        st.error(f"⚠️ 데이터 처리 중 에러 발생: {e}")
         return None, None, None, None
 
-# 데이터 로드 실행
+# 데이터 호출
 df, df_ap, period_options, period_to_label = load_data_v2()
 
-if df is not None and period_options:
-    # 성공 시 기존 대시보드 코드 실행
-    st.success("✅ 데이터 로드 성공!")
-    # ... (여기에 기존 시각화 코드들 붙여넣기)
-else:
-    st.warning("데이터가 비어있거나 로드에 실패했습니다.")
+if df is None:
+    st.info("데이터 로드에 실패하여 대시보드 작성을 중단합니다.")
     st.stop()
 
 
