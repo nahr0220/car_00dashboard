@@ -63,57 +63,45 @@ st.markdown(
 
 @st.cache_data
 def load_data_v2():
-    # 1) 분기별 이전등록 데이터 (Git에 포함된 CSV들)
-    data_path = Path("data")
+    # 현재 실행 중인 파일의 절대 경로를 기준으로 data 폴더 설정
+    base_path = Path(__file__).parent
+    data_path = base_path / "data"
+    
+    # 1) 분기별 이전등록 데이터 검색
     files = sorted(data_path.glob("output_*분기.csv"))
 
     if not files:
-        raise FileNotFoundError("분기별 데이터 파일이 없습니다.")
+        # 에러가 나면 여기서 멈추고 화면에 경로 정보를 보여줌
+        st.error(f"⚠️ 데이터를 찾을 수 없습니다! 경로를 확인하세요: {data_path.absolute()}")
+        st.info("GitHub 저장소에 'data' 폴더와 'output_...분기.csv' 파일이 있는지 확인해 주세요.")
+        st.stop()
 
     df_list = []
-
     for f in files:
         df_q = pd.read_csv(f, encoding="utf-8-sig")
         df_list.append(df_q)
 
     df = pd.concat(df_list, ignore_index=True)
-
-    # 컬럼 정리 (안전장치)
     df.columns = df.columns.str.strip()
 
-    # 2) AP 데이터 (엑셀은 그대로 사용)
-    df_ap = pd.read_excel(
-        "data/AP Sales Summary.xlsx",
-        skiprows=1
-    )
+    # 2) AP 데이터 경로 설정
+    ap_path = data_path / "AP Sales Summary.xlsx"
+    if not ap_path.exists():
+        st.error(f"⚠️ AP 데이터를 찾을 수 없습니다: {ap_path.name}")
+        st.stop()
+
+    df_ap = pd.read_excel(ap_path, skiprows=1)
     df_ap.columns = ["년도", "월", "AP"]
     df_ap = df_ap[df_ap["년도"] >= 2024].copy()
 
-    # 연월번호 / 연월라벨
+    # 이후 전처리 로직은 동일...
     for d in (df, df_ap):
         d["연월번호"] = d["년도"] * 100 + d["월"]
-        d["연월라벨"] = (
-            d["년도"].astype(str)
-            + "-"
-            + d["월"].astype(str).str.zfill(2)
-        )
+        d["연월라벨"] = d["년도"].astype(str) + "-" + d["월"].astype(str).str.zfill(2)
 
-    periods = (
-        df[["연월번호", "연월라벨"]]
-        .drop_duplicates()
-        .sort_values("연월번호")
-    )
-
-    period_options = [
-        {"label": r["연월라벨"], "value": int(r["연월번호"])}
-        for _, r in periods.iterrows()
-    ]
-
-    period_to_label = (
-        periods.set_index("연월번호")["연월라벨"]
-        .astype(str)
-        .to_dict()
-    )
+    periods = df[["연월번호", "연월라벨"]].drop_duplicates().sort_values("연월번호")
+    period_options = [{"label": r["연월라벨"], "value": int(r["연월번호"])} for _, r in periods.iterrows()]
+    period_to_label = periods.set_index("연월번호")["연월라벨"].astype(str).to_dict()
 
     return df, df_ap, period_options, period_to_label
 
