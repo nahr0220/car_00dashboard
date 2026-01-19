@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from io import BytesIO
 from pathlib import Path
+import os
 
 # ========================================
 # 1. 페이지 설정 (최초 Streamlit 명령)
@@ -62,45 +63,74 @@ st.markdown(
 # ========================================
 @st.cache_data
 def load_data_v2():
-    # 현재 실행 중인 파일(app_streamlit_converted.py)의 위치를 기준으로 절대 경로 생성
+    # 1. 경로 설정 (현재 파일 기준 절대 경로)
     base_path = Path(__file__).parent
     data_path = base_path / "data"
     
-    # 1) 분기별 데이터 검색
-    files = sorted(data_path.glob("output_*분기.csv"))
+    # 경로 존재 확인
+    if not data_path.exists():
+        st.error(f"❌ 'data' 폴더를 찾을 수 없습니다. 경로: {data_path.absolute()}")
+        st.stop()
 
-    # 디버깅용: 파일이 하나도 없을 경우 화면에 에러 표시
-    if not files:
-        st.error(f"❌ 데이터를 찾을 수 없습니다! 확인된 경로: {data_path.absolute()}")
-        st.info("GitHub 저장소의 'data' 폴더 안에 'output_...분기.csv' 파일이 있는지 확인해 주세요.")
-        st.stop() # 여기서 실행 중단
+    # 2. 파일 목록 읽기 (한글 인코딩 문제 방지를 위해 직접 리스팅)
+    all_files = os.listdir(data_path)
+    
+    # 'output_'으로 시작하고 '.csv'로 끝나는 모든 파일 찾기
+    csv_files = [f for f in all_files if f.startswith("output_") and f.endswith(".csv")]
+    
+    if not csv_files:
+        st.error(f"❌ CSV 파일을 찾을 수 없습니다. (확인된 파일: {all_files})")
+        st.stop()
 
     df_list = []
-    for f in files:
-        df_q = pd.read_csv(f, encoding="utf-8-sig")
+    for f in sorted(csv_files):
+        full_path = data_path / f
+        # 한글 깨짐 방지를 위해 utf-8-sig 사용
+        df_q = pd.read_csv(full_path, encoding="utf-8-sig")
         df_list.append(df_q)
 
     df = pd.concat(df_list, ignore_index=True)
     df.columns = df.columns.str.strip()
 
-    # 2) AP 데이터 경로 확인
-    ap_path = data_path / "AP Sales Summary.xlsx"
-    if not ap_path.exists():
-        st.error(f"❌ AP 엑셀 파일을 찾을 수 없습니다: {ap_path}")
+    # 3. AP 데이터 로드 (파일명에 한글이 있어도 찾을 수 있게 처리)
+    # 'AP Sales Summary'가 포함된 엑셀 파일 찾기
+    ap_files = [f for f in all_files if "AP Sales Summary" in f and f.endswith((".xlsx", ".xls"))]
+    
+    if not ap_files:
+        st.error(f"❌ AP 엑셀 파일을 찾을 수 없습니다. 폴더 내 파일: {all_files}")
         st.stop()
-
+        
+    ap_path = data_path / ap_files[0] # 첫 번째 매칭되는 파일 사용
     df_ap = pd.read_excel(ap_path, skiprows=1)
+    
+    # 4. 공통 전처리 로직
     df_ap.columns = ["년도", "월", "AP"]
     df_ap = df_ap[df_ap["년도"] >= 2024].copy()
 
-    # 나머지 전처리 로직 (동일)
     for d in (df, df_ap):
         d["연월번호"] = d["년도"] * 100 + d["월"]
-        d["연월라벨"] = d["년도"].astype(str) + "-" + d["월"].astype(str).str.zfill(2)
+        d["연월라벨"] = (
+            d["년도"].astype(str)
+            + "-"
+            + d["월"].astype(str).str.zfill(2)
+        )
 
-    periods = df[["연월번호", "연월라벨"]].drop_duplicates().sort_values("연월번호")
-    period_options = [{"label": r["연월라벨"], "value": int(r["연월번호"])} for _, r in periods.iterrows()]
-    period_to_label = periods.set_index("연월번호")["연월라벨"].astype(str).to_dict()
+    periods = (
+        df[["연월번호", "연월라벨"]]
+        .drop_duplicates()
+        .sort_values("연월번호")
+    )
+
+    period_options = [
+        {"label": r["연월라벨"], "value": int(r["연월번호"])}
+        for _, r in periods.iterrows()
+    ]
+
+    period_to_label = (
+        periods.set_index("연월번호")["연월라벨"]
+        .astype(str)
+        .to_dict()
+    )
 
     return df, df_ap, period_options, period_to_label
 
