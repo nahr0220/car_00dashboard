@@ -60,21 +60,20 @@ st.markdown(
 # ========================================
 # 3. 데이터 로드 & 공통 전처리
 # ========================================
-
 @st.cache_data
 def load_data_v2():
-    # 현재 실행 중인 파일의 절대 경로를 기준으로 data 폴더 설정
+    # 현재 실행 중인 파일(app_streamlit_converted.py)의 위치를 기준으로 절대 경로 생성
     base_path = Path(__file__).parent
     data_path = base_path / "data"
     
-    # 1) 분기별 이전등록 데이터 검색
+    # 1) 분기별 데이터 검색
     files = sorted(data_path.glob("output_*분기.csv"))
 
+    # 디버깅용: 파일이 하나도 없을 경우 화면에 에러 표시
     if not files:
-        # 에러가 나면 여기서 멈추고 화면에 경로 정보를 보여줌
-        st.error(f"⚠️ 데이터를 찾을 수 없습니다! 경로를 확인하세요: {data_path.absolute()}")
-        st.info("GitHub 저장소에 'data' 폴더와 'output_...분기.csv' 파일이 있는지 확인해 주세요.")
-        st.stop()
+        st.error(f"❌ 데이터를 찾을 수 없습니다! 확인된 경로: {data_path.absolute()}")
+        st.info("GitHub 저장소의 'data' 폴더 안에 'output_...분기.csv' 파일이 있는지 확인해 주세요.")
+        st.stop() # 여기서 실행 중단
 
     df_list = []
     for f in files:
@@ -84,17 +83,17 @@ def load_data_v2():
     df = pd.concat(df_list, ignore_index=True)
     df.columns = df.columns.str.strip()
 
-    # 2) AP 데이터 경로 설정
+    # 2) AP 데이터 경로 확인
     ap_path = data_path / "AP Sales Summary.xlsx"
     if not ap_path.exists():
-        st.error(f"⚠️ AP 데이터를 찾을 수 없습니다: {ap_path.name}")
+        st.error(f"❌ AP 엑셀 파일을 찾을 수 없습니다: {ap_path}")
         st.stop()
 
     df_ap = pd.read_excel(ap_path, skiprows=1)
     df_ap.columns = ["년도", "월", "AP"]
     df_ap = df_ap[df_ap["년도"] >= 2024].copy()
 
-    # 이후 전처리 로직은 동일...
+    # 나머지 전처리 로직 (동일)
     for d in (df, df_ap):
         d["연월번호"] = d["년도"] * 100 + d["월"]
         d["연월라벨"] = d["년도"].astype(str) + "-" + d["월"].astype(str).str.zfill(2)
