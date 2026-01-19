@@ -4,6 +4,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 from io import BytesIO
+from pathlib import Path
 
 # ========================================
 # 1. 페이지 설정 (최초 Streamlit 명령)
@@ -60,37 +61,40 @@ st.markdown(
 # 3. 데이터 로드 & 공통 전처리
 # ========================================
 
-CSV_URL = "https://drive.google.com/uc?export=download&id=1TGl7syMbFbjYi0UbSDKC-DPGa1OF7Ff4"
-
-
 @st.cache_data
 def load_data():
-    # 1) 이전등록 데이터 (Google Drive)
-    df = pd.read_csv(CSV_URL, encoding="utf-8-sig")
+    # 1) 분기별 이전등록 데이터 (Git에 포함된 CSV들)
+    data_path = Path("data")
+    files = sorted(data_path.glob("output_*분기.csv"))
 
-    # 🔴 핵심: 컬럼명 정리 (BOM / 공백 제거)
+    if not files:
+        raise FileNotFoundError("분기별 데이터 파일이 없습니다.")
+
+    df_list = []
+    for f in files:
+        df_q = pd.read_csv(f, encoding="utf-8-sig")
+        df_list.append(df_q)
+
+    df = pd.concat(df_list, ignore_index=True)
+
+    # 컬럼 정리 (안전장치)
     df.columns = df.columns.str.strip()
-    df.columns = df.columns.str.replace("\ufeff", "", regex=False)
 
-    # 혹시 '연도'로 되어 있으면 '년도'로 통일
-    if "연도" in df.columns and "년도" not in df.columns:
-        df = df.rename(columns={"연도": "년도"})
-
-    # 2) AP 데이터 (Git에 포함된 엑셀)
+    # 2) AP 데이터 (엑셀은 그대로 사용)
     df_ap = pd.read_excel(
         "data/AP Sales Summary.xlsx",
         skiprows=1
     )
     df_ap.columns = ["년도", "월", "AP"]
-
-    # 2024년 이후만
     df_ap = df_ap[df_ap["년도"] >= 2024].copy()
 
-    # 연월번호 / 연월라벨 생성
+    # 연월번호 / 연월라벨
     for d in (df, df_ap):
         d["연월번호"] = d["년도"] * 100 + d["월"]
         d["연월라벨"] = (
-            d["년도"].astype(str) + "-" + d["월"].astype(str).str.zfill(2)
+            d["년도"].astype(str)
+            + "-"
+            + d["월"].astype(str).str.zfill(2)
         )
 
     periods = (
@@ -105,7 +109,9 @@ def load_data():
     ]
 
     period_to_label = (
-        periods.set_index("연월번호")["연월라벨"].astype(str).to_dict()
+        periods.set_index("연월번호")["연월라벨"]
+        .astype(str)
+        .to_dict()
     )
 
     return df, df_ap, period_options, period_to_label
