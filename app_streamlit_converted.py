@@ -61,10 +61,14 @@ st.markdown(
 # ========================================
 @st.cache_data
 def load_data():
-    df = pd.read_csv("C:/Users/24100801/Desktop/output.csv")
+    def load_data():
+        CSV_URL = "https://drive.google.com/1TGl7syMbFbjYi0UbSDKC-DPGa1OF7Ff4"
+        return pd.read_csv(CSV_URL)
+    df = load_data()
     df_ap = pd.read_excel(
-        "C:/Users/24100801/Desktop/AP Sales Summary.xlsx", skiprows=1
-    )
+        "data/AP Sales Summary.xlsx",
+        skiprows=1
+)
     df_ap.columns = ["년도", "월", "AP"]
 
     # 2024년 이후만
