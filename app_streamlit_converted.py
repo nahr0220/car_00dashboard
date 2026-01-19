@@ -60,71 +60,49 @@ st.markdown(
 
 # ========================================
 # 3. 데이터 로드 & 공통 전처리
-# [디버깅] 현재 서버 환경의 파일 목록을 강제로 출력해서 확인
-st.write("### 🔍 서버 파일 시스템 체크")
-base_path = Path(__file__).parent
-data_path = base_path / "data"
-
-if not data_path.exists():
-    st.error(f"❌ 'data' 폴더가 서버에 없습니다. 현재 위치: {os.getcwd()}")
-    st.stop()
-else:
-    st.success(f"✅ 'data' 폴더 확인됨. 내부 파일: {os.listdir(data_path)}")
-
 @st.cache_data
 def load_data_v2():
-    try:
-        all_files = os.listdir(data_path)
-        # 한글 직접 입력 없이 'output_'으로 시작하는 모든 CSV 합치기
-        csv_files = [f for f in all_files if f.lower().startswith("output_") and f.lower().endswith(".csv")]
+    import glob
+    from pathlib import Path
+    
+    base_path = Path(__file__).parent
+    data_path = base_path / "data"
+
+    # 1. Parquet 파일들 합치기 (CSV보다 훨씬 빠르고 메모리 적게 먹음)
+    parquet_files = glob.glob(str(data_path / "*.parquet"))
+    if not parquet_files:
+        st.error("❌ Parquet 파일을 찾을 수 없습니다. data 폴더에 .parquet 파일을 넣어주세요.")
+        st.stop()
         
-        if not csv_files:
-            raise FileNotFoundError("CSV 파일을 하나도 찾지 못했습니다.")
+    df = pd.concat([pd.read_parquet(f) for f in parquet_files], ignore_index=True)
+    df.columns = df.columns.str.strip()
 
-        df_list = []
-        for f in sorted(csv_files):
-            # 인코딩 에러 방지 및 컬럼 공백 제거
-            tmp = pd.read_csv(data_path / f, encoding="utf-8-sig")
-            tmp.columns = tmp.columns.str.strip()
-            df_list.append(tmp)
-
-        full_df = pd.concat(df_list, ignore_index=True)
+    # 2. AP 데이터 로드 (기존 엑셀 파일 그대로 사용)
+    all_files = os.listdir(data_path)
+    ap_files = [f for f in all_files if "ap" in f.lower() and f.lower().endswith((".xlsx", ".xls"))]
+    
+    if not ap_files:
+        st.error("❌ AP 엑셀 파일이 없습니다.")
+        st.stop()
         
-        # AP 데이터 (파일명에 'AP' 포함된 엑셀)
-        ap_files = [f for f in all_files if "ap" in f.lower() and f.lower().endswith((".xlsx", ".xls"))]
-        if not ap_files:
-            raise FileNotFoundError("AP 엑셀 파일을 찾지 못했습니다.")
-            
-        df_ap = pd.read_excel(data_path / ap_files[0], skiprows=1)
-        df_ap.columns = ["년도", "월", "AP"]
-        df_ap = df_ap[df_ap["년도"] >= 2024].copy()
+    df_ap = pd.read_excel(data_path / ap_files[0], skiprows=1)
+    df_ap.columns = ["년도", "월", "AP"]
+    df_ap = df_ap[df_ap["년도"] >= 2024].copy()
 
-        # 전처리
-        for d in (full_df, df_ap):
-            d["연월번호"] = d["년도"] * 100 + d["월"]
-            d["연월라벨"] = d["년도"].astype(str) + "-" + d["월"].astype(str).str.zfill(2)
+    # 3. 공통 전처리 로직
+    for d in (df, df_ap):
+        d["연월번호"] = d["년도"].astype(int) * 100 + d["월"].astype(int)
+        d["연월라벨"] = d["년도"].astype(str) + "-" + d["월"].astype(str).str.zfill(2)
 
-        periods = full_df[["연월번호", "연월라벨"]].drop_duplicates().sort_values("연월번호")
-        period_options = [{"label": r["연월라벨"], "value": int(r["연월번호"])} for _, r in periods.iterrows()]
-        
-        if not period_options:
-            raise ValueError("데이터 로드 후 생성된 기간 옵션이 없습니다.")
+    periods = df[["연월번호", "연월라벨"]].drop_duplicates().sort_values("연월번호")
+    period_options = [{"label": r["연월라벨"], "value": int(r["연월번호"])} for _, r in periods.iterrows()]
+    period_to_label = periods.set_index("연월번호")["연월라벨"].astype(str).to_dict()
 
-        period_to_label = periods.set_index("연월번호")["연월라벨"].astype(str).to_dict()
+    # 4개 모두 반환
+    return df, df_ap, period_options, period_to_label
 
-        return full_df, df_ap, period_options, period_to_label
-
-    except Exception as e:
-        # 에러 발생 시 화면에 에러 종류를 직접 뿌림
-        st.error(f"⚠️ 데이터 처리 중 에러 발생: {e}")
-        return None, None, None, None
-
-# 데이터 호출
+# 데이터 호출 (이제 개수가 딱 맞습니다!)
 df, df_ap, period_options, period_to_label = load_data_v2()
-
-if df is None:
-    st.info("데이터 로드에 실패하여 대시보드 작성을 중단합니다.")
-    st.stop()
 
 
 # ========================================
