@@ -6,7 +6,7 @@ import streamlit as st
 from io import BytesIO
 from pathlib import Path
 import os
-
+import glob
 # ========================================
 # 1. 페이지 설정 (최초 Streamlit 명령)
 # ========================================
@@ -62,34 +62,35 @@ st.markdown(
 # 3. 데이터 로드 & 공통 전처리
 @st.cache_data
 def load_data_v2():
-    import glob
-    from pathlib import Path
-    
     base_path = Path(__file__).parent
     data_path = base_path / "data"
 
-    # 1. Parquet 파일들 합치기 (CSV보다 훨씬 빠르고 메모리 적게 먹음)
-    parquet_files = glob.glob(str(data_path / "*.parquet"))
+    # --- [A] Parquet 데이터 로드 ---
+    # 경로를 문자열로 변환하여 glob에 전달
+    parquet_pattern = str(data_path / "*.parquet")
+    parquet_files = glob.glob(parquet_pattern)
+    
     if not parquet_files:
-        st.error("❌ Parquet 파일을 찾을 수 없습니다. data 폴더에 .parquet 파일을 넣어주세요.")
-        st.stop()
+        st.error(f"❌ Parquet 파일을 찾을 수 없습니다. (확인 경로: {parquet_pattern})")
+        return None, None, None, None
         
+    # 여러 개의 parquet 파일이 있다면 하나로 합침
     df = pd.concat([pd.read_parquet(f) for f in parquet_files], ignore_index=True)
     df.columns = df.columns.str.strip()
 
-    # 2. AP 데이터 로드 (기존 엑셀 파일 그대로 사용)
+    # --- [B] AP 엑셀 데이터 로드 ---
     all_files = os.listdir(data_path)
     ap_files = [f for f in all_files if "ap" in f.lower() and f.lower().endswith((".xlsx", ".xls"))]
     
     if not ap_files:
-        st.error("❌ AP 엑셀 파일이 없습니다.")
-        st.stop()
+        st.error("❌ AP 엑셀 파일이 없습니다. (파일명에 'AP' 포함 필수)")
+        return None, None, None, None
         
     df_ap = pd.read_excel(data_path / ap_files[0], skiprows=1)
     df_ap.columns = ["년도", "월", "AP"]
     df_ap = df_ap[df_ap["년도"] >= 2024].copy()
 
-    # 3. 공통 전처리 로직
+    # --- [C] 전처리 ---
     for d in (df, df_ap):
         d["연월번호"] = d["년도"].astype(int) * 100 + d["월"].astype(int)
         d["연월라벨"] = d["년도"].astype(str) + "-" + d["월"].astype(str).str.zfill(2)
@@ -98,11 +99,25 @@ def load_data_v2():
     period_options = [{"label": r["연월라벨"], "value": int(r["연월번호"])} for _, r in periods.iterrows()]
     period_to_label = periods.set_index("연월번호")["연월라벨"].astype(str).to_dict()
 
-    # 4개 모두 반환
     return df, df_ap, period_options, period_to_label
 
-# 데이터 호출 (이제 개수가 딱 맞습니다!)
-df, df_ap, period_options, period_to_label = load_data_v2()
+# --- 데이터 호출 및 실행 ---
+try:
+    df, df_ap, period_options, period_to_label = load_data_v2()
+    
+    if df is not None:
+        st.balloons() # 성공 시 풍선 효과
+        st.success(f"✅ 성공! 데이터 {len(df):,}행을 로드했습니다.")
+        
+        # 여기에 기존 대시보드 시각화 코드(st.markdown 등)를 붙여넣으세요.
+        st.markdown("## 자동차 이전등록 대시보드")
+        # ...
+    else:
+        st.stop()
+        
+except Exception as e:
+    st.error(f"🔥 실행 중 에러 발생: {e}")
+    st.stop()
 
 
 # ========================================
