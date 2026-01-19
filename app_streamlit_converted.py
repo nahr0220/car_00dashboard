@@ -66,7 +66,15 @@ CSV_URL = "https://drive.google.com/uc?export=download&id=1TGl7syMbFbjYi0UbSDKC-
 @st.cache_data
 def load_data():
     # 1) 이전등록 데이터 (Google Drive)
-    df = pd.read_csv(CSV_URL)
+    df = pd.read_csv(CSV_URL, encoding="utf-8-sig")
+
+    # 🔴 핵심: 컬럼명 정리 (BOM / 공백 제거)
+    df.columns = df.columns.str.strip()
+    df.columns = df.columns.str.replace("\ufeff", "", regex=False)
+
+    # 혹시 '연도'로 되어 있으면 '년도'로 통일
+    if "연도" in df.columns and "년도" not in df.columns:
+        df = df.rename(columns={"연도": "년도"})
 
     # 2) AP 데이터 (Git에 포함된 엑셀)
     df_ap = pd.read_excel(
