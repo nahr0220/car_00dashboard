@@ -62,67 +62,70 @@ st.markdown(
 # 3. 데이터 로드 & 공통 전처리
 @st.cache_data
 def load_data_v2():
-    base_path = Path(__file__).parent
-    data_path = base_path / "data"
-    
-    # [방어 1] 폴더 확인
-    if not data_path.exists():
-        st.error(f"❌ 'data' 폴더를 찾을 수 없습니다. (경로: {data_path})")
-        return None, None, None, None
-
-    all_files = os.listdir(data_path)
-    csv_files = [f for f in all_files if f.lower().startswith("output_") and f.lower().endswith(".csv")]
-    
-    # [방어 2] 파일 확인
-    if not csv_files:
-        st.error(f"❌ CSV 파일이 하나도 없습니다. 현재 폴더 파일: {all_files}")
-        return None, None, None, None
-
-    df_list = []
-    for f in sorted(csv_files):
-        try:
-            tmp = pd.read_csv(data_path / f, encoding="utf-8-sig")
-            tmp.columns = tmp.columns.str.strip() # 공백 제거
-            df_list.append(tmp)
-        except Exception as e:
-            st.error(f"❌ {f} 파일을 읽는 중 에러: {e}")
-
-    df = pd.concat(df_list, ignore_index=True)
-
-    # AP 데이터 로드
-    ap_files = [f for f in all_files if "ap" in f.lower() and f.lower().endswith((".xlsx", ".xls"))]
-    if not ap_files:
-        st.error("❌ AP 엑셀 파일을 찾을 수 없습니다.")
-        return None, None, None, None
+    try:
+        base_path = Path(__file__).parent
+        data_path = base_path / "data"
         
-    df_ap = pd.read_excel(data_path / ap_files[0], skiprows=1)
-    df_ap.columns = ["년도", "월", "AP"]
-    df_ap = df_ap[df_ap["년도"] >= 2024].copy()
+        if not data_path.exists():
+            st.error(f"❌ 'data' 폴더가 없습니다. 경로: {data_path}")
+            return None, None, None, None
 
-    for d in (df, df_ap):
-        d["연월번호"] = d["년도"] * 100 + d["월"]
-        d["연월라벨"] = d["년도"].astype(str) + "-" + d["월"].astype(str).str.zfill(2)
+        all_files = os.listdir(data_path)
+        csv_files = [f for f in all_files if f.lower().startswith("output_") and f.lower().endswith(".csv")]
+        
+        if not csv_files:
+            st.error(f"❌ CSV 파일을 찾을 수 없습니다. 폴더 내 파일: {all_files}")
+            return None, None, None, None
 
-    periods = df[["연월번호", "연월라벨"]].drop_duplicates().sort_values("연월번호")
-    period_options = [{"label": r["연월라벨"], "value": int(r["연월번호"])} for _, r in periods.iterrows()]
-    period_to_label = periods.set_index("연월번호")["연월라벨"].astype(str).to_dict()
+        df_list = []
+        for f in sorted(csv_files):
+            # 인코딩 및 공백 제거 처리
+            tmp = pd.read_csv(data_path / f, encoding="utf-8-sig")
+            tmp.columns = tmp.columns.str.strip() # 컬럼명 공백 제거
+            
+            # 필수 컬럼 체크
+            required = ["년도", "월", "중고차시장", "유효시장", "마케팅"]
+            for col in required:
+                if col not in tmp.columns:
+                    st.error(f"❌ 파일 '{f}'에 '{col}' 컬럼이 없습니다. 현재 컬럼: {list(tmp.columns)}")
+                    st.stop()
+            df_list.append(tmp)
 
-    return df, df_ap, period_options, period_to_label
+        df = pd.concat(df_list, ignore_index=True)
+
+        # AP 데이터 로드
+        ap_files = [f for f in all_files if "ap" in f.lower() and f.lower().endswith((".xlsx", ".xls"))]
+        if not ap_files:
+            st.error("❌ AP 엑셀 파일을 찾을 수 없습니다.")
+            return None, None, None, None
+            
+        df_ap = pd.read_excel(data_path / ap_files[0], skiprows=1)
+        df_ap.columns = ["년도", "월", "AP"]
+        df_ap = df_ap[df_ap["년도"] >= 2024].copy()
+
+        for d in (df, df_ap):
+            d["연월번호"] = d["년도"] * 100 + d["월"]
+            d["연월라벨"] = d["년도"].astype(str) + "-" + d["월"].astype(str).str.zfill(2)
+
+        periods = df[["연월번호", "연월라벨"]].drop_duplicates().sort_values("연월번호")
+        period_options = [{"label": r["연월라벨"], "value": int(r["연월번호"])} for _, r in periods.iterrows()]
+        period_to_label = periods.set_index("연월번호")["연월라벨"].astype(str).to_dict()
+
+        return df, df_ap, period_options, period_to_label
+
+    except Exception as e:
+        st.error(f"🔥 데이터 로딩 중 치명적 오류: {e}")
+        return None, None, None, None
 
 # 데이터 로드 실행
 df, df_ap, period_options, period_to_label = load_data_v2()
 
-# [방어 3] 데이터가 비었을 때 앱 중단 방지
-if df is None or not period_options:
-    st.warning("⚠️ 데이터를 불러오지 못했습니다. 위 에러 메시지를 확인하세요.")
-    st.stop()
-
-# [방어 4] 기본 선택값 안전하게 지정
-default_index = len(period_options) - 1 if period_options else 0
-
-# 데이터 로드 실패 시 중단
-if df is None:
-    st.warning("데이터 로드에 실패하여 대시보드를 표시할 수 없습니다.")
+if df is not None and period_options:
+    # 성공 시 기존 대시보드 코드 실행
+    st.success("✅ 데이터 로드 성공!")
+    # ... (여기에 기존 시각화 코드들 붙여넣기)
+else:
+    st.warning("데이터가 비어있거나 로드에 실패했습니다.")
     st.stop()
 
 
