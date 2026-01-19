@@ -71,10 +71,33 @@ def load_data_v2():
         raise FileNotFoundError("분기별 데이터 파일이 없습니다.")
 
     df_list = []
+
     for f in files:
         df_q = pd.read_csv(f, encoding="utf-8-sig")
+
+        # ✅ [여기에 추가] 컬럼 정규화 & 검사
+        df_q.columns = (
+            df_q.columns
+            .str.strip()
+            .str.replace("\ufeff", "", regex=False)
+        )
+
+        # '연도' → '년도' 통일
+        if "연도" in df_q.columns and "년도" not in df_q.columns:
+            df_q = df_q.rename(columns={"연도": "년도"})
+
+        # 필수 컬럼 체크
+        required = {"년도", "월"}
+        missing = required - set(df_q.columns)
+
+        if missing:
+            st.error(f"❌ 컬럼 누락 파일: {f.name}")
+            st.write("컬럼 목록:", df_q.columns.tolist())
+            st.stop()
+
         df_list.append(df_q)
 
+    # 🔽 이 줄은 for문 끝난 다음
     df = pd.concat(df_list, ignore_index=True)
 
     # 컬럼 정리 (안전장치)
