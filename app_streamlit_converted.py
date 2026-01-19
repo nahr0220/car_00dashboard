@@ -62,7 +62,7 @@ st.markdown(
 # ========================================
 
 @st.cache_data
-def load_data():
+def load_data_v2():
     # 1) 분기별 이전등록 데이터 (Git에 포함된 CSV들)
     data_path = Path("data")
     files = sorted(data_path.glob("output_*분기.csv"))
@@ -117,7 +117,7 @@ def load_data():
     return df, df_ap, period_options, period_to_label
 
 
-df, df_ap, period_options, period_to_label = load_data()
+df, df_ap, period_options, period_to_label = load_data_v2()
 
 
 # ========================================
