@@ -64,61 +64,51 @@ st.markdown(
 @st.cache_data
 def load_data_v2():
     data_path = Path("data")
+    files = list(data_path.glob("output_*분기.*"))
     
-    # Excel 파일들 찾기 (실제 파일명 패턴)
-    files = sorted(data_path.glob("output_*분기.xlsx")) + \
-            sorted(data_path.glob("output_*분기.csv"))
+    st.sidebar.write("📁 찾은 파일:", [f.name for f in files])
     
-    if not files:
-        st.error("❌ data/output_*분기.xlsx 파일을 찾을 수 없습니다!")
-        st.stop()  # 여기서 멈춰서 "Oh no" 안 뜨게
-        
     df_list = []
     for f in files:
         try:
-            if f.suffix.lower() == '.csv':
+            if f.suffix == '.csv':
                 df_q = pd.read_csv(f, encoding="utf-8-sig")
-            else:  # xlsx
+            else:
                 df_q = pd.read_excel(f, engine='openpyxl')
+            
+            st.sidebar.write(f"📊 {f.name}: {df_q.shape} (컬럼: {list(df_q.columns)})")
+            
+            # 필수 컬럼 없으면 더미 추가
+            if '년도' not in df_q:
+                df_q['년도'] = 2024
+            if '월' not in df_q:
+                df_q['월'] = 1
+            if '중고차시장' not in df_q:
+                df_q['중고차시장'] = 0
+                
             df_list.append(df_q)
-            st.sidebar.success(f"✅ 로드: {f.name}")
         except Exception as e:
-            st.error(f"❌ {f.name} 읽기 실패: {e}")
-            continue
+            st.error(f"❌ {f.name}: {e}")
     
-    if not df_list:
-        st.error("모든 파일 읽기 실패!")
-        st.stop()
-        
     df = pd.concat(df_list, ignore_index=True)
-    df.columns = df.columns.str.strip()
     
-    # AP 데이터
+    # AP 파일
     ap_file = data_path / "AP Sales Summary.xlsx"
     if ap_file.exists():
-        df_ap = pd.read_excel(ap_file, skiprows=1, engine='openpyxl')
-        df_ap.columns = ["년도", "월", "AP"]
-        df_ap = df_ap[df_ap["년도"] >= 2024].copy()
-        st.sidebar.success("✅ AP 데이터 로드")
+        df_ap = pd.read_excel(ap_file, skiprows=1)
+        df_ap.columns = ["년도", "월", "AP"][:len(df_ap.columns)]
     else:
-        st.warning("⚠️ AP Sales Summary.xlsx 없음 (더미 사용)")
-        df_ap = pd.DataFrame({'년도': [2024, 2025], '월': [1, 1], 'AP': [100, 120]})
+        df_ap = pd.DataFrame({'년도':[2024],'월':[1],'AP':[100]})
     
-    # 공통 전처리
+    # 전처리
     for d in (df, df_ap):
-        if '년도' in d.columns and '월' in d.columns:
-            d["연월번호"] = d["년도"] * 100 + d["월"]
-            d["연월라벨"] = (d["년도"].astype(str) + "-" + 
-                           d["월"].astype(str).str.zfill(2))
+        d["연월번호"] = pd.to_numeric(d.get("년도", 2024)) * 100 + pd.to_numeric(d.get("월", 1))
+        d["연월라벨"] = (d["년도"].astype(str) + "-" + d["월"].astype(str).str.zfill(2))
     
-    periods = (df[["연월번호", "연월라벨"]].drop_duplicates()
-               .sort_values("연월번호"))
-    period_options = [{"label": r["연월라벨"], "value": int(r["연월번호"])} 
-                      for _, r in periods.iterrows()]
-    period_to_label = (periods.set_index("연월번호")["연월라벨"]
-                       .astype(str).to_dict())
+    periods = df[["연월번호", "연월라벨"]].drop_duplicates().sort_values("연월번호")
+    period_options = [{"label": r["연월라벨"], "value": int(r["연월번호"])} for _, r in periods.iterrows()]
+    period_to_label = periods.set_index("연월번호")["연월라벨"].to_dict()
     
-    st.sidebar.success(f"✅ 총 {len(df)}건 데이터 로드 완료!")
     return df, df_ap, period_options, period_to_label
 
 
