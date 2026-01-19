@@ -61,67 +61,62 @@ st.markdown(
 # ========================================
 # 3. 데이터 로드 & 공통 전처리
 @st.cache_data
-def load_data_v2():
-    # 현재 실행 파일의 경로를 기준으로 설정
-    base_path = Path(__file__).parent
-    data_path = base_path / "data"
+def load_data():
+    # 1) 분기별 이전등록 데이터 (Git에 포함된 CSV들)
+    data_path = Path("data")
+    files = sorted(data_path.glob("output_*분기.csv"))
 
-    if not data_path.exists():
-        st.error(f"❌ 'data' 폴더를 찾을 수 없습니다. 경로: {data_path.absolute()}")
-        st.stop()
-
-    # 폴더 내 모든 파일 이름을 가져옵니다.
-    all_files = os.listdir(data_path)
-    
-    # 1) CSV 파일 찾기: 파일명에 'output_'가 포함되고 '.csv'로 끝나는 것만 필터링 (한글 무관)
-    csv_files = [f for f in all_files if f.lower().startswith("output_") and f.lower().endswith(".csv")]
-    
-    if not csv_files:
-        st.error(f"❌ CSV 파일을 찾을 수 없습니다. (현재 폴더 내 파일들: {all_files})")
-        st.stop()
+    if not files:
+        raise FileNotFoundError("분기별 데이터 파일이 없습니다.")
 
     df_list = []
-    # 파일명 순서대로 정렬하여 로드
-    for f in sorted(csv_files):
-        file_full_path = data_path / f
-        # 한글 깨짐 방지를 위해 utf-8-sig 사용
-        df_q = pd.read_csv(file_full_path, encoding="utf-8-sig")
+    for f in files:
+        df_q = pd.read_csv(f, encoding="utf-8-sig")
         df_list.append(df_q)
 
     df = pd.concat(df_list, ignore_index=True)
+
+    # 컬럼 정리 (안전장치)
     df.columns = df.columns.str.strip()
 
-    # 2) AP 데이터 로드: 파일명에 'AP'가 들어있는 엑셀 파일 찾기
-    ap_files = [f for f in all_files if "ap" in f.lower() and f.lower().endswith((".xlsx", ".xls"))]
-    
-    if not ap_files:
-        st.error(f"❌ AP 엑셀 파일을 찾을 수 없습니다. (현재 폴더 내 파일들: {all_files})")
-        st.stop()
-        
-    df_ap = pd.read_excel(data_path / ap_files[0], skiprows=1)
+    # 2) AP 데이터 (엑셀은 그대로 사용)
+    df_ap = pd.read_excel(
+        "data/AP Sales Summary.xlsx",
+        skiprows=1
+    )
     df_ap.columns = ["년도", "월", "AP"]
     df_ap = df_ap[df_ap["년도"] >= 2024].copy()
 
-    # 연월번호 / 연월라벨 생성
+    # 연월번호 / 연월라벨
     for d in (df, df_ap):
         d["연월번호"] = d["년도"] * 100 + d["월"]
-        d["연월라벨"] = d["년도"].astype(str) + "-" + d["월"].astype(str).str.zfill(2)
+        d["연월라벨"] = (
+            d["년도"].astype(str)
+            + "-"
+            + d["월"].astype(str).str.zfill(2)
+        )
 
-    periods = df[["연월번호", "연월라벨"]].drop_duplicates().sort_values("연월번호")
-    period_options = [{"label": r["연월라벨"], "value": int(r["연월번호"])} for _, r in periods.iterrows()]
-    period_to_label = periods.set_index("연월번호")["연월라벨"].astype(str).to_dict()
+    periods = (
+        df[["연월번호", "연월라벨"]]
+        .drop_duplicates()
+        .sort_values("연월번호")
+    )
+
+    period_options = [
+        {"label": r["연월라벨"], "value": int(r["연월번호"])}
+        for _, r in periods.iterrows()
+    ]
+
+    period_to_label = (
+        periods.set_index("연월번호")["연월라벨"]
+        .astype(str)
+        .to_dict()
+    )
 
     return df, df_ap, period_options, period_to_label
 
-# 데이터 로드 실행
-try:
-    df, df_ap, period_options, period_to_label = load_data_v2()
-except Exception as e:
-    st.error(f"🔥 데이터를 읽는 중 예상치 못한 오류가 발생했습니다: {e}")
-    st.stop()
 
-# 데이터 호출
-df, df_ap, period_options, period_to_label = load_data_v2()
+df, df_ap, period_options, period_to_label = load_data()
 
 # 데이터 로드 실패 시 중단
 if df is None:
