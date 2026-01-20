@@ -1,7 +1,8 @@
 
 # ===============================================================
 # 자동차 이전등록 대시보드
-# FULL FINAL VERSION (DuckDB / Cloud Stable)
+# FULL FINAL ABSOLUTE VERSION
+# DuckDB + Disk Excel Download (NO OOM)
 # ===============================================================
 
 import duckdb
@@ -9,8 +10,9 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
-from io import BytesIO
 from pathlib import Path
+import tempfile
+import os
 
 # ---------------------------------------------------------------
 # Page config
@@ -239,11 +241,14 @@ st.markdown("<div class='graph-box'><div class='graph-header'><h3>월별 연령�
 st.plotly_chart(fig_age_line, use_container_width=True)
 
 # ---------------------------------------------------------------
-# Excel generation (session_state safe)
+# Excel generation (DISK based)
 # ---------------------------------------------------------------
-def create_excel():
-    out = BytesIO()
-    with pd.ExcelWriter(out, engine="xlsxwriter") as w:
+def create_excel_to_disk():
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
+    path = tmp.name
+    tmp.close()
+
+    with pd.ExcelWriter(path, engine="xlsxwriter") as w:
         con.execute(f"""
             SELECT 연월라벨, 이전등록유형, COUNT(*) AS 건수
             FROM df WHERE {where}
@@ -253,22 +258,32 @@ def create_excel():
             columns="이전등록유형",
             values="건수"
         ).fillna(0).to_excel(w, "월별_분포")
-    out.seek(0)
-    return out
 
-if "excel_file" not in st.session_state:
-    st.session_state.excel_file = None
+        con.execute(f"""
+            SELECT 나이, 성별, COUNT(*) AS 건수
+            FROM df WHERE {where}
+            GROUP BY 나이, 성별
+        """).df().pivot(
+            index=["나이","성별"],
+            values="건수"
+        ).fillna(0).to_excel(w, "연령성별대_분포")
+
+    return path
+
+if "excel_path" not in st.session_state:
+    st.session_state.excel_path = None
     st.session_state.excel_name = None
 
 if excel_clicked:
     with st.spinner("엑셀 생성 중..."):
-        st.session_state.excel_file = create_excel()
+        st.session_state.excel_path = create_excel_to_disk()
         st.session_state.excel_name = f"이전등록_{period_to_label[start_p]}_{period_to_label[end_p]}_{market}.xlsx"
 
-if st.session_state.excel_file:
-    st.download_button(
-        "⬇️ XLSX 다운로드",
-        st.session_state.excel_file,
-        file_name=st.session_state.excel_name,
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+if st.session_state.excel_path and os.path.exists(st.session_state.excel_path):
+    with open(st.session_state.excel_path, "rb") as f:
+        st.download_button(
+            "⬇️ XLSX 다운로드",
+            f,
+            file_name=st.session_state.excel_name,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
