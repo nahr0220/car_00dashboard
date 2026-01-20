@@ -131,15 +131,86 @@ if market_type != "전체": where += f" AND {market_type}=1"
 
 with f3:
     if st.button("📥 엑셀 생성 및 다운로드"):
-        g_excel = con.execute(f"SELECT 연월라벨, 이전등록유형, COUNT(*) AS 건수 FROM df WHERE {where} GROUP BY 연월번호, 연월라벨, 이전등록유형 ORDER BY 연월번호").df()
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
         path = tmp.name
         tmp.close()
+
         with pd.ExcelWriter(path, engine="xlsxwriter") as w:
-            g_excel.pivot(index="연월라벨", columns="이전등록유형", values="건수").fillna(0).to_excel(w, "월별_분포")
-            con.execute(f"SELECT 나이, 성별, COUNT(*) AS 건수 FROM df WHERE {where} GROUP BY 나이, 성별").df().to_excel(w, "연령성별_분포")
+
+            # 1️⃣ 월별 건수 (기존 유지)
+            monthly_cnt = con.execute(f"""
+                SELECT 연월라벨, COUNT(*) AS 건수
+                FROM df
+                WHERE {where}
+                GROUP BY 연월번호, 연월라벨
+                ORDER BY 연월번호
+            """).df()
+
+            monthly_cnt.to_excel(w, sheet_name="월별_건수", index=False)
+
+            # 2️⃣ 월별 연령·성별 분포
+            age_gender_m = con.execute(f"""
+                SELECT 연월라벨, 나이, 성별, COUNT(*) AS 건수
+                FROM df
+                WHERE {where} AND 나이!='법인및사업자'
+                GROUP BY 연월번호, 연월라벨, 나이, 성별
+                ORDER BY 연월번호
+            """).df()
+
+            age_gender_m.pivot_table(
+                index=["연월라벨", "나이"],
+                columns="성별",
+                values="건수",
+                fill_value=0
+            ).to_excel(w, sheet_name="월별_연령성별_분포")
+
+            # 3️⃣ 월별 주행거리 범위
+            mileage_m = con.execute(f"""
+                SELECT 연월라벨, 주행거리_범위, COUNT(*) AS 건수
+                FROM df
+                WHERE {where}
+                GROUP BY 연월번호, 연월라벨, 주행거리_범위
+                ORDER BY 연월번호
+            """).df()
+
+            mileage_m.pivot(
+                index="연월라벨",
+                columns="주행거리_범위",
+                values="건수"
+            ).fillna(0).to_excel(w, sheet_name="월별_주행거리_범위")
+
+            # 4️⃣ 월별 취득금액 범위
+            price_m = con.execute(f"""
+                SELECT 연월라벨, 취득금액_범위, COUNT(*) AS 건수
+                FROM df
+                WHERE {where}
+                GROUP BY 연월번호, 연월라벨, 취득금액_범위
+                ORDER BY 연월번호
+            """).df()
+
+            price_m.pivot(
+                index="연월라벨",
+                columns="취득금액_범위",
+                values="건수"
+            ).fillna(0).to_excel(w, sheet_name="월별_취득금액_범위")
+
+            # 5️⃣ 시/도별 분포
+            sido = con.execute(f"""
+                SELECT 시도, COUNT(*) AS 건수
+                FROM df
+                WHERE {where}
+                GROUP BY 시도
+                ORDER BY 건수 DESC
+            """).df()
+
+            sido.to_excel(w, sheet_name="시도별_분포", index=False)
+
         with open(path, "rb") as f:
-            st.download_button("✅ 준비완료! 파일 다운로드", f, file_name=f"이전등록_{period_to_label[start_p]}_{period_to_label[end_p]}.xlsx")
+            st.download_button(
+                "✅ 준비완료! 파일 다운로드",
+                f,
+                file_name=f"이전등록_{period_to_label[start_p]}_{period_to_label[end_p]}.xlsx"
+            )
 st.markdown("</div>", unsafe_allow_html=True)
 
 # ---------------------------------------------------------------
