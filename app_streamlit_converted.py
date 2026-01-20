@@ -1,6 +1,5 @@
 # ===============================================================
-# 자동차 이전등록 대시보드 (MEMORY OPTIMIZED VERSION)
-# DuckDB 집계 중심 설계 (OOM 방지)
+# 자동차 이전등록 대시보드 (FINAL OPTIMIZED + UI RESTORED)
 # ===============================================================
 
 import duckdb
@@ -17,7 +16,6 @@ import os
 # ---------------------------------------------------------------
 st.set_page_config(page_title="자동차 이전등록 대시보드", layout="wide")
 
-# CSS (기존 유지)
 st.markdown("""
 <style>
 .stApp { max-width:1200px; margin:0 auto; padding:20px 40px; background:#fff; }
@@ -36,15 +34,10 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ---------------------------------------------------------------
-# DuckDB connection (메모리 제한 설정 추가)
-# ---------------------------------------------------------------
 @st.cache_resource
 def get_con():
     con = duckdb.connect(database=":memory:")
-    # 메모리 사용량을 2GB로 제한하고 임시 디렉토리 활용
     con.execute("SET memory_limit = '2GB'")
-    
     files = sorted(Path("data").glob("output_*분기.csv"))
     file_list_sql = "[" + ",".join(f"'{str(f)}'" for f in files) + "]"
     con.execute(f"""
@@ -59,7 +52,7 @@ def get_con():
 con = get_con()
 
 # ---------------------------------------------------------------
-# AP data (기존 유지)
+# AP data
 # ---------------------------------------------------------------
 try:
     df_ap = pd.read_excel("data/AP Sales Summary.xlsx", skiprows=1)
@@ -70,14 +63,11 @@ try:
 except:
     df_ap = pd.DataFrame(columns=["연월번호", "연월라벨", "AP"])
 
-# ---------------------------------------------------------------
-# Periods
-# ---------------------------------------------------------------
 periods = con.execute('SELECT DISTINCT "연월번호", "연월라벨" FROM df ORDER BY "연월번호"').df()
 period_to_label = dict(zip(periods["연월번호"], periods["연월라벨"]))
 
 # ---------------------------------------------------------------
-# KPI (데이터 전체 로드 없이 SQL에서 값만 추출)
+# KPI
 # ---------------------------------------------------------------
 cur_period = int(periods["연월번호"].max())
 cur_year, cur_month = divmod(cur_period,100)
@@ -96,7 +86,6 @@ yoy = (cur_cnt-yoy_cnt)/yoy_cnt*100 if yoy_cnt else 0
 used_cnt = get_count(f"SELECT COUNT(*) FROM df WHERE 연월번호={cur_period} AND 중고차시장=1")
 ratio = used_cnt/cur_cnt*100 if cur_cnt else 0
 
-# KPI UI (기존 유지)
 st.markdown("## 자동차 이전등록 대시보드")
 c1,c2,c3 = st.columns(3)
 with c1: st.markdown(f"<div class='kpi-box'><h4>{cur_year}년 누적 거래량</h4><h2>{cur_cnt:,}</h2></div>", unsafe_allow_html=True)
@@ -107,28 +96,54 @@ with c2:
 with c3: st.markdown(f"<div class='kpi-box'><h4>중고차 비중</h4><h2>{ratio:.1f}%</h2></div>", unsafe_allow_html=True)
 
 # ---------------------------------------------------------------
-# Filters
+# Filters & Excel Logic
 # ---------------------------------------------------------------
 st.markdown('<div class="filter-box">', unsafe_allow_html=True)
 f1,f2,f3 = st.columns([1,1,0.6])
 with f1: start_p = st.selectbox("시작 연월", periods["연월번호"], format_func=lambda x: period_to_label[x])
 with f2: end_p = st.selectbox("종료 연월", periods["연월번호"], index=len(periods)-1, format_func=lambda x: period_to_label[x])
-with f3: excel_clicked = st.button("📥 엑셀 생성")
-market = st.radio("시장 구분", ["전체","중고차시장","유효시장","마케팅"], horizontal=True)
-st.markdown("</div>", unsafe_allow_html=True)
 
 if start_p > end_p: start_p, end_p = end_p, start_p
 where = f"연월번호 BETWEEN {start_p} AND {end_p}"
-if market != "전체": where += f" AND {market}=1"
+market_type = st.radio("시장 구분", ["전체","중고차시장","유효시장","마케팅"], horizontal=True)
+if market_type != "전체": where += f" AND {market_type}=1"
+
+# 엑셀 생성 함수
+def create_excel_to_disk(g1_data, current_where):
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
+    path = tmp.name
+    tmp.close()
+    with pd.ExcelWriter(path, engine="xlsxwriter") as w:
+        g1_data.pivot(index="연월라벨", columns="이전등록유형", values="건수").fillna(0).to_excel(w, "월별_분포")
+        con.execute(f"SELECT 나이, 성별, COUNT(*) AS 건수 FROM df WHERE {current_where} GROUP BY 나이, 성별").df().to_excel(w, "연령성별_분포")
+    return path
+
+with f3:
+    if st.button("📥 엑셀 생성 및 다운로드"):
+        # 생성 전 집계 데이터 미리 확보
+        g_excel = con.execute(f"SELECT 연월라벨, 이전등록유형, COUNT(*) AS 건수 FROM df WHERE {where} GROUP BY 연월번호, 연월라벨, 이전등록유형 ORDER BY 연월번호").df()
+        path = create_excel_to_disk(g_excel, where)
+        with open(path, "rb") as f:
+            st.download_button("✅ 준비완료! 파일 다운로드", f, file_name=f"이전등록_{period_to_label[start_p]}_{period_to_label[end_p]}.xlsx")
+st.markdown("</div>", unsafe_allow_html=True)
 
 # ---------------------------------------------------------------
-# Graph 1: 월별 이전등록유형 추이 (집계 후 로드)
+# Graph 1: 월별 이전등록유형 추이 (숫자 표시 추가)
 # ---------------------------------------------------------------
 g1 = con.execute(f"SELECT 연월라벨, 이전등록유형, COUNT(*) AS 건수 FROM df WHERE {where} GROUP BY 연월번호, 연월라벨, 이전등록유형 ORDER BY 연월번호").df()
 g_total = g1.groupby("연월라벨")["건수"].sum().reset_index()
 
 fig1 = go.Figure()
-fig1.add_bar(x=g_total["연월라벨"], y=g_total["건수"], name="전체", opacity=0.3)
+# 막대 그래프에 숫자 표시 설정
+fig1.add_bar(
+    x=g_total["연월라벨"], 
+    y=g_total["건수"], 
+    name="전체", 
+    opacity=0.3,
+    text=g_total["건수"],
+    textposition='outside',
+    texttemplate='%{text:,}' # 천단위 콤마
+)
 for t in g1["이전등록유형"].unique():
     d = g1[g1["이전등록유형"]==t]
     fig1.add_scatter(x=d["연월라벨"], y=d["건수"], mode="lines+markers", name=str(t))
@@ -137,18 +152,34 @@ st.markdown("<div class='graph-box'><div class='graph-header'><h3>월별 이전�
 st.plotly_chart(fig1, use_container_width=True)
 
 # ---------------------------------------------------------------
-# Graph 2: AP 월별 추이 (집계 후 로드)
+# Graph 2: AP 월별 추이 (라인 및 비중 복구)
 # ---------------------------------------------------------------
 valid_m = con.execute(f"SELECT 연월번호, 연월라벨, COUNT(*) AS 유효시장건수 FROM df WHERE 유효시장=1 GROUP BY 연월번호, 연월라벨").df()
 df_ap_m = pd.merge(df_ap, valid_m, on=["연월번호","연월라벨"], how="inner")
+
 if not df_ap_m.empty:
     df_ap_m["AP비중"] = df_ap_m["AP"]/df_ap_m["유효시장건수"]*100
-    fig_ap = px.bar(df_ap_m, x="연월라벨", y="AP", text_auto=True, title="AP 판매량")
-    st.markdown("<div class='graph-box'><div class='graph-header'><h3>AP 월별 추이</h3></div></div>", unsafe_allow_html=True)
+    # 비중을 막대 높이에 맞춰 스케일링 (기존 로직)
+    ap_max = df_ap_m["AP"].max() if not df_ap_m["AP"].empty else 1
+    ratio_max = df_ap_m["AP비중"].max() if not df_ap_m["AP비중"].empty else 1
+    df_ap_m["AP비중_시각화"] = (df_ap_m["AP비중"]/ratio_max) * ap_max * 0.8
+
+    fig_ap = go.Figure()
+    fig_ap.add_bar(x=df_ap_m["연월라벨"], y=df_ap_m["AP"], name="AP 판매량", text=df_ap_m["AP"], textposition='outside')
+    fig_ap.add_scatter(
+        x=df_ap_m["연월라벨"], 
+        y=df_ap_m["AP비중_시각화"], 
+        mode="lines+markers+text",
+        text=df_ap_m["AP비중"].round(2).astype(str) + "%",
+        textposition="top center",
+        name="AP 비중 (%)",
+        line=dict(color='red', width=3)
+    )
+    st.markdown("<div class='graph-box'><div class='graph-header'><h3>AP 월별 추이 (유효시장 대비)</h3></div></div>", unsafe_allow_html=True)
     st.plotly_chart(fig_ap, use_container_width=True)
 
 # ---------------------------------------------------------------
-# Graph 3: 연령·성별 (★중요: .df() 호출 전 SQL에서 COUNT 완료)
+# Graph 3 & 4 (집계형 유지)
 # ---------------------------------------------------------------
 age_data = con.execute(f"SELECT 나이, COUNT(*) AS 건수 FROM df WHERE {where} AND 나이!='법인및사업자' GROUP BY 나이 ORDER BY 나이").df()
 gender_data = con.execute(f"SELECT 성별, COUNT(*) AS 건수 FROM df WHERE {where} AND 나이!='법인및사업자' GROUP BY 성별").df()
@@ -156,36 +187,11 @@ gender_data = con.execute(f"SELECT 성별, COUNT(*) AS 건수 FROM df WHERE {whe
 st.markdown("<div class='graph-box'><div class='graph-header'><h3>연령·성별 현황</h3></div></div>", unsafe_allow_html=True)
 c_age, c_gender = st.columns([4, 2])
 with c_age:
-    st.plotly_chart(px.bar(age_data, x="건수", y="나이", orientation="h"), use_container_width=True)
+    fig_age = px.bar(age_data, x="건수", y="나이", orientation="h", text_auto=',.0f')
+    st.plotly_chart(fig_age, use_container_width=True)
 with c_gender:
     st.plotly_chart(px.pie(gender_data, values="건수", names="성별", hole=0.5), use_container_width=True)
 
-# ---------------------------------------------------------------
-# Graph 4: 월별 연령대별 추이 (집계 후 로드)
-# ---------------------------------------------------------------
 age_line = con.execute(f"SELECT 연월라벨, 나이, COUNT(*) AS 건수 FROM df WHERE {where} AND 나이!='법인및사업자' GROUP BY 연월번호, 연월라벨, 나이 ORDER BY 연월번호").df()
 st.markdown("<div class='graph-box'><div class='graph-header'><h3>월별 연령대별 추이</h3></div></div>", unsafe_allow_html=True)
 st.plotly_chart(px.line(age_line, x="연월라벨", y="건수", color="나이", markers=True), use_container_width=True)
-
-# ---------------------------------------------------------------
-# Excel generation (최적화)
-# ---------------------------------------------------------------
-def create_excel_to_disk():
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
-    path = tmp.name
-    tmp.close()
-    with pd.ExcelWriter(path, engine="xlsxwriter") as w:
-        # 월별 분포 집계 데이터
-        g1.pivot(index="연월라벨", columns="이전등록유형", values="건수").fillna(0).to_excel(w, "월별_분포")
-        # 연령/성별 집계 데이터
-        con.execute(f"SELECT 나이, 성별, COUNT(*) AS 건수 FROM df WHERE {where} GROUP BY 나이, 성별").df().to_excel(w, "연령성별_분포")
-    return path
-
-if excel_clicked:
-    with st.spinner("데이터 집계 및 엑셀 생성 중..."):
-        st.session_state.excel_path = create_excel_to_disk()
-        st.session_state.excel_name = f"이전등록_{period_to_label[start_p]}_{period_to_label[end_p]}.xlsx"
-
-if "excel_path" in st.session_state and st.session_state.excel_path:
-    with open(st.session_state.excel_path, "rb") as f:
-        st.download_button("⬇️ XLSX 다운로드", f, file_name=st.session_state.excel_name)
