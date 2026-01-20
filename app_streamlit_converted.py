@@ -196,10 +196,10 @@ with f3:
 
             # 5️⃣ 시/도별 분포
             sido = con.execute(f"""
-                SELECT 시/도, COUNT(*) AS 건수
+                SELECT "시/도", COUNT(*) AS 건수
                 FROM df
                 WHERE {where}
-                GROUP BY 시/도
+                GROUP BY "시/도"
                 ORDER BY 건수 DESC
             """).df()
 
