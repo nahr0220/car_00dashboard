@@ -112,23 +112,20 @@ def load_data_v2():
     period_to_label = periods.set_index("연월번호")["연월라벨"].astype(str).to_dict()
 
     return df, df_ap, period_options, period_to_label
+# --- 데이터 호출 및 실행 (Cloud 안전 버전) --
 
-# --- 데이터 호출 및 실행 ---
 try:
     df, df_ap, period_options, period_to_label = load_data_v2()
-    
-    if df is not None:
-        st.balloons() # 성공 시 풍선 효과
-        st.success(f"✅ 성공! 데이터 {len(df):,}행을 로드했습니다.")
-        
-        # 여기에 기존 대시보드 시각화 코드(st.markdown 등)를 붙여넣으세요.
-        st.markdown("## 자동차 이전등록 대시보드")
-        # ...
-    else:
-        st.stop()
-        
-except Exception as e:
-    st.error(f"🔥 실행 중 에러 발생: {e}")
+
+    st.success(f"✅ 앱 실행 성공 · 데이터 {len(df):,}행 로드 완료")
+
+    # ✅ 여기부터 기존 대시보드 코드 시작
+    st.markdown("## 자동차 이전등록 대시보드")
+    # 기존 KPI / 그래프 코드 붙여넣기
+
+except Exception:
+    st.error("🔥 실행 중 에러 발생")
+    st.text(traceback.format_exc())
     st.stop()
 
 
