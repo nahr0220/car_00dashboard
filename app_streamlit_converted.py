@@ -119,10 +119,10 @@ where = f"연월번호 BETWEEN {start_p} AND {end_p}"
 # 시장구분 도움말 (마우스 올리면 나오는 메시지)
 market_help_msg = """
 **각 시장의 정의:**
-- **전체**: 모든 이전등록 데이터 포함
-- **중고차시장**: 실제 중고차 매매 거래
-- **유효시장**: 타겟 마케팅이 가능한 유효 범위
-- **마케팅**: 캠페인 진행 대상 필터링
+- **전체**: 국토교통부의 자동차 이전 데이터 전체 
+- **중고차시장**: 중고차 전체 등록대수 중 개인 간 거래대수를 포함한 사업자 거래대수를 의미 (개인거래 + 매도 + 상사이전 + 알선)	
+- **유효시장**: 중고차 전체 등록대수 중 개인 간 거래대수를 제외한 사업자 거래대수를 의미 (매도 + 상사이전 + 알선)	
+- **마케팅**: 마케팅팀이 사전에 정의한 필터링 기준에 따라, 이전등록구분명이 ‘매매업자거래이전’이며 등록상세명이 ‘일반소유용’인 이전 등록 건을 의미
 """
 # help 인자를 사용하여 (?) 아이콘 툴팁 구현
 market_type = st.radio("시장 구분 선택", ["전체","중고차시장","유효시장","마케팅"], horizontal=True, help=market_help_msg)
@@ -152,7 +152,7 @@ fig1 = go.Figure()
 fig1.add_bar(
     x=g_total["연월라벨"], y=g_total["건수"], name="전체", opacity=0.3,
     text=g_total["건수"], textposition='outside',
-    texttemplate='<b>%{text:,}</b>', textfont=dict(size=20, color="black")
+    texttemplate='<b>%{text:,}</b>', textfont=dict(size=30, color="black")
 )
 for t in g1["이전등록유형"].unique():
     d = g1[g1["이전등록유형"]==t]
@@ -178,13 +178,13 @@ if not df_ap_m.empty:
     fig_ap.add_bar(
         x=df_ap_m["연월라벨"], y=df_ap_m["AP"], name="AP 판매량", 
         text=df_ap_m["AP"], textposition='outside',
-        texttemplate='<b>%{text:,}</b>', textfont=dict(size=18, color="black")
+        texttemplate='<b>%{text:,}</b>', textfont=dict(size=15, color="black")
     )
     fig_ap.add_scatter(
         x=df_ap_m["연월라벨"], y=df_ap_m["AP비중_시각화"], 
         mode="lines+markers+text", text=df_ap_m["AP비중"].round(2).astype(str) + "%",
-        textposition="top center", textfont=dict(size=12, color="red", family="Arial Black"), 
-        name="AP 비중 (%)", line=dict(color='red', width=3)
+        textposition="top center", textfont=dict(size=10, color="red", family="Arial Black"), 
+        name="AP 비중 (%)", line=dict(color='red', width=1.5)
     )
     fig_ap.update_layout(xaxis=dict(ticks=""), yaxis=dict(ticks=""))
     fig_ap.update_yaxes(range=[0, ap_max * 2.0])
