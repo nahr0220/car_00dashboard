@@ -1,274 +1,201 @@
-
-# ======================================================================================
-# app_streamlit_converted.py
-# 자동차 이전등록 대시보드 (Streamlit Cloud 안정 버전)
-# ======================================================================================
-
 import pandas as pd
-import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
-from pathlib import Path
 from io import BytesIO
+from pathlib import Path
 
-# ======================================================================================
-# 1. Page Config
-# ======================================================================================
-st.set_page_config(
-    page_title="자동차 이전등록 대시보드",
-    layout="wide"
-)
+# ========================================
+# 1. 페이지 설정
+# ========================================
+st.set_page_config(page_title="자동차 이전등록 대시보드", layout="wide")
 
-# ======================================================================================
-# 2. Paths
-# ======================================================================================
-BASE_DIR = Path(__file__).resolve().parent
-DATA_DIR = BASE_DIR / "data"
-
-# ======================================================================================
-# 3. CSS
-# ======================================================================================
+# ========================================
+# 2. CSS
+# ========================================
 st.markdown(
-    '''
-    <style>
-    .stApp { max-width: 1320px; margin: 0 auto; }
-    .kpi-box {
-        background:#F6F8FA;
-        padding:18px;
-        border-radius:12px;
-        text-align:center;
-    }
-    .graph-box {
-        background:#FFFFFF;
-        padding:16px;
-        border-radius:14px;
-        margin-bottom:20px;
-        box-shadow:0 2px 8px rgba(0,0,0,0.05);
-    }
-    .graph-header {
-        font-size:18px;
-        font-weight:600;
-        margin-bottom:8px;
-    }
-    </style>
-    ''',
-    unsafe_allow_html=True
+    """
+<style>
+.stApp { max-width:1200px; margin:auto; padding:20px 40px; }
+#MainMenu, footer, header { visibility: hidden; }
+.kpi-box {
+    background:#F8F8F8; padding:22px; border-radius:10px;
+    text-align:center; height:150px;
+}
+.filter-box, .graph-box {
+    background:#EDF4FF; border-radius:12px; margin-bottom:20px;
+}
+.graph-header {
+    background:#E3F2FD; padding:16px; border-radius:10px;
+}
+</style>
+""",
+    unsafe_allow_html=True,
 )
 
-# ======================================================================================
-# 4. Utilities
-# ======================================================================================
-def fatal(msg: str):
-    st.error(msg)
-    st.stop()
+# ========================================
+# 3. 데이터 로드 (메모리 최적화)
+# ========================================
+@st.cache_data
+def load_data():
+    dtype_map = {
+        "년도": "int16",
+        "월": "int8",
+        "중고차시장": "int8",
+        "유효시장": "int8",
+        "마케팅": "int8",
+        "성별": "category",
+        "나이": "category",
+        "이전등록유형": "category",
+        "시/도": "category",
+        "구/군": "category",
+        "주행거리_범위": "category",
+        "취득금액_범위": "category",
+    }
 
-# ======================================================================================
-# 5. Data Loaders (CSV only – Cloud safe)
-# ======================================================================================
-@st.cache_data(show_spinner=False)
-def load_quarter_csv(year: int, quarter: int) -> pd.DataFrame:
-    file_path = DATA_DIR / f"output_{year}_{quarter}분기.csv"
+    data_path = Path("data")
+    files = sorted(data_path.glob("output_*분기.csv"))
+    if not files:
+        raise FileNotFoundError("CSV 없음")
 
-    if not file_path.exists():
-        fatal(f"❌ 데이터 파일 없음: {file_path.name}")
-
-    df = pd.read_csv(
-        file_path,
-        encoding="utf-8-sig",
-        usecols=[
-            "년도","월","이전등록유형",
-            "중고차시장","유효시장","마케팅",
-            "취득금액_범위","주행거리_범위",
-            "나이","성별","시/도","구/군"
-        ]
+    df = pd.concat(
+        [
+            pd.read_csv(f, encoding="utf-8-sig", dtype=dtype_map, low_memory=False)
+            for f in files
+        ],
+        ignore_index=True,
     )
 
+    df.columns = df.columns.str.strip()
     df["연월번호"] = df["년도"] * 100 + df["월"]
-    df["연월라벨"] = (
-        df["년도"].astype(str) + "-" + df["월"].astype(str).str.zfill(2)
-    )
+    df["연월라벨"] = df["년도"].astype(str) + "-" + df["월"].astype(str).str.zfill(2)
 
-    return df
-
-@st.cache_data(show_spinner=False)
-def load_ap_csv() -> pd.DataFrame:
-    ap_path = DATA_DIR / "AP_Sales_Summary.csv"
-    if not ap_path.exists():
-        fatal("❌ AP_Sales_Summary.csv 파일이 없습니다.")
-
-    df_ap = pd.read_csv(ap_path)
-    df_ap = df_ap[df_ap["년도"] >= 2024].copy()
-
+    # AP 데이터
+    df_ap = pd.read_excel("data/AP Sales Summary.xlsx", skiprows=1)
+    df_ap.columns = ["년도", "월", "AP"]
+    df_ap = df_ap[df_ap["년도"] >= 2024]
     df_ap["연월번호"] = df_ap["년도"] * 100 + df_ap["월"]
     df_ap["연월라벨"] = (
         df_ap["년도"].astype(str) + "-" + df_ap["월"].astype(str).str.zfill(2)
     )
 
-    return df_ap
-
-# ======================================================================================
-# 6. Header & Filters
-# ======================================================================================
-st.title("자동차 이전등록 대시보드")
-
-f1, f2, f3 = st.columns([1,1,2])
-
-with f1:
-    year = st.selectbox("년도", [2024, 2025], index=0)
-
-with f2:
-    quarter = st.selectbox("분기", [1,2,3,4], index=0)
-
-with f3:
-    market = st.radio(
-        "시장 구분",
-        ["전체", "중고차시장", "유효시장", "마케팅"],
-        horizontal=True
+    # 월별 집계 (그래프용)
+    monthly_type = (
+        df.groupby(["연월라벨", "이전등록유형"])
+        .size()
+        .reset_index(name="건수")
+    )
+    monthly_total = (
+        df.groupby("연월라벨")
+        .size()
+        .reset_index(name="전체건수")
     )
 
-# ======================================================================================
-# 7. Load Data (after user selection)
-# ======================================================================================
-with st.spinner("데이터 로딩 중..."):
-    df = load_quarter_csv(year, quarter)
-    df_ap = load_ap_csv()
-
-if market == "중고차시장":
-    df = df[df["중고차시장"] == 1]
-elif market == "유효시장":
-    df = df[df["유효시장"] == 1]
-elif market == "마케팅":
-    df = df[df["마케팅"] == 1]
-
-st.success(f"✅ {year}년 {quarter}분기 · {market} 데이터 {len(df):,}건")
-
-# ======================================================================================
-# 8. KPI
-# ======================================================================================
-k1, k2, k3 = st.columns(3)
-
-with k1:
-    st.markdown(
-        f"<div class='kpi-box'>분기 누적 거래량<br><b>{len(df):,}</b></div>",
-        unsafe_allow_html=True
+    periods = (
+        df[["연월번호", "연월라벨"]]
+        .drop_duplicates()
+        .sort_values("연월번호")
     )
 
-with k2:
-    latest_month = df["월"].max()
-    m_cnt = len(df[df["월"] == latest_month])
-    st.markdown(
-        f"<div class='kpi-box'>최근 월 거래량<br><b>{m_cnt:,}</b></div>",
-        unsafe_allow_html=True
+    return df, df_ap, monthly_type, monthly_total, periods
+
+
+df, df_ap, g_type, g_total, periods = load_data()
+period_to_label = dict(zip(periods["연월번호"], periods["연월라벨"]))
+
+# ========================================
+# 4. KPI
+# ========================================
+cur_period = int(df["연월번호"].max())
+cur_year, cur_month = divmod(cur_period, 100)
+
+cur_cnt = (df["연월번호"] == cur_period).sum()
+ytd_cnt = ((df["년도"] == cur_year) & (df["연월번호"] <= cur_period)).sum()
+
+# ========================================
+# 5. 필터
+# ========================================
+st.markdown('<div class="filter-box">', unsafe_allow_html=True)
+c1, c2, c3 = st.columns([1, 1, 0.6])
+
+with c1:
+    start_period = st.selectbox(
+        "시작 연월", periods["연월번호"], format_func=lambda x: period_to_label[x]
     )
 
-with k3:
-    used_ratio = (
-        df["중고차시장"].mean() * 100 if len(df) else 0
+with c2:
+    end_period = st.selectbox(
+        "종료 연월",
+        periods["연월번호"],
+        index=len(periods) - 1,
+        format_func=lambda x: period_to_label[x],
     )
-    st.markdown(
-        f"<div class='kpi-box'>중고차 비중<br><b>{used_ratio:.1f}%</b></div>",
-        unsafe_allow_html=True
-    )
 
-# ======================================================================================
-# 9. Graph – 월별 거래 추이
-# ======================================================================================
-st.markdown("<div class='graph-box'><div class='graph-header'>월별 거래량</div></div>", unsafe_allow_html=True)
-
-monthly = (
-    df.groupby("연월라벨")
-    .size()
-    .reset_index(name="건수")
+market = st.radio(
+    "시장",
+    ["전체", "중고차시장", "유효시장", "마케팅"],
+    horizontal=True,
 )
 
-fig_month = px.bar(
-    monthly,
-    x="연월라벨",
-    y="건수",
-    text="건수"
-)
-fig_month.update_traces(texttemplate="%{text:,}", textposition="outside")
-fig_month.update_layout(yaxis_tickformat=",d")
+# ========================================
+# 6. 필터링 (copy ❌)
+# ========================================
+df_f = df.loc[
+    (df["연월번호"] >= min(start_period, end_period))
+    & (df["연월번호"] <= max(start_period, end_period))
+]
 
-st.plotly_chart(fig_month, use_container_width=True)
+if market != "전체":
+    df_f = df_f[df_f[market] == 1]
 
-# ======================================================================================
-# 10. Graph – 연령대 분포
-# ======================================================================================
-st.markdown("<div class='graph-box'><div class='graph-header'>연령대 분포</div></div>", unsafe_allow_html=True)
-
-age_df = df[df["나이"] != "법인및사업자"]
-age_cnt = age_df["나이"].value_counts().reset_index()
-age_cnt.columns = ["나이", "건수"]
-
-fig_age = px.bar(
-    age_cnt,
-    x="건수",
-    y="나이",
-    orientation="h"
-)
-fig_age.update_layout(yaxis_categoryorder="total ascending")
-
-st.plotly_chart(fig_age, use_container_width=True)
-
-# ======================================================================================
-# 11. Graph – AP 월별 추이
-# ======================================================================================
-st.markdown("<div class='graph-box'><div class='graph-header'>AP 월별 추이</div></div>", unsafe_allow_html=True)
-
-ap_m = pd.merge(
-    df_ap,
-    df.groupby("연월번호").size().reset_index(name="전체건수"),
-    on="연월번호",
-    how="left"
+# ========================================
+# 7. 월별 추이 그래프
+# ========================================
+fig = go.Figure()
+fig.add_bar(
+    x=g_total["연월라벨"],
+    y=g_total["전체건수"],
+    name="전체",
+    opacity=0.5,
 )
 
-ap_m["AP비중"] = ap_m["AP"] / ap_m["전체건수"] * 100
+for t in g_type["이전등록유형"].unique():
+    d = g_type[g_type["이전등록유형"] == t]
+    fig.add_scatter(x=d["연월라벨"], y=d["건수"], mode="lines+markers", name=t)
 
-fig_ap = go.Figure()
-fig_ap.add_bar(
-    x=ap_m["연월라벨"],
-    y=ap_m["AP"],
-    name="AP 판매대수"
-)
-fig_ap.add_scatter(
-    x=ap_m["연월라벨"],
-    y=ap_m["AP비중"],
-    name="AP 비중",
-    yaxis="y2"
-)
+fig.update_layout(height=420)
+st.plotly_chart(fig, use_container_width=True)
 
-fig_ap.update_layout(
-    yaxis2=dict(
-        overlaying="y",
-        side="right",
-        title="AP 비중(%)"
-    )
-)
+# ========================================
+# 8. 다운로드 (클릭 시 생성)
+# ========================================
+def make_excel(df_dl):
+    cols = [
+        "연월라벨", "이전등록유형", "나이", "성별",
+        "주행거리_범위", "취득금액_범위", "시/도", "구/군"
+    ]
+    df_dl = df_dl[cols]
 
-st.plotly_chart(fig_ap, use_container_width=True)
+    out = BytesIO()
+    with pd.ExcelWriter(out, engine="xlsxwriter") as w:
+        df_dl.pivot_table(
+            index="연월라벨", columns="이전등록유형", aggfunc="size", fill_value=0
+        ).to_excel(w, "월별")
+        df_dl.pivot_table(
+            index=["나이", "성별"], aggfunc="size", fill_value=0
+        ).to_excel(w, "연령성별")
+    out.seek(0)
+    return out
 
-# ======================================================================================
-# 12. Download – 요약 CSV
-# ======================================================================================
-st.markdown("<div class='graph-box'><div class='graph-header'>데이터 다운로드</div></div>", unsafe_allow_html=True)
 
-summary = (
-    df.groupby(["연월라벨","이전등록유형"])
-    .size()
-    .reset_index(name="건수")
-)
+with c3:
+    if st.button("엑셀 생성"):
+        excel = make_excel(df_f)
+        st.download_button(
+            "⬇ XLSX",
+            excel,
+            file_name="이전등록_다운로드.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
 
-csv_bytes = summary.to_csv(index=False).encode("utf-8-sig")
-
-st.download_button(
-    label="⬇️ 요약 CSV 다운로드",
-    data=csv_bytes,
-    file_name=f"이전등록_요약_{year}_{quarter}분기_{market}.csv",
-    mime="text/csv"
-)
-
-# ======================================================================================
-# END
-# ======================================================================================
+st.markdown("</div>", unsafe_allow_html=True)
