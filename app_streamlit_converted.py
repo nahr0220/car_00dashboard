@@ -140,7 +140,7 @@ fig1.add_bar(
     text=g_total["건수"],
     textposition='outside',
     texttemplate='<b>%{text:,}</b>', # <b> 태그로 진하게 설정
-    textfont=dict(size=14, color="black")
+    textfont=dict(size=14, color="black",family="Arial")
 )
 for t in g1["이전등록유형"].unique():
     d = g1[g1["이전등록유형"]==t]
@@ -161,7 +161,7 @@ if not df_ap_m.empty:
     ratio_max = df_ap_m["AP비중"].max() if not df_ap_m["AP비중"].empty else 1
     
     # 비중 위치를 막대 최대값보다 더 위쪽(1.2배 지점)으로 보정하여 '한참 위로' 배치
-    df_ap_m["AP비중_시각화"] = (df_ap_m["AP비중"]/ratio_max) * ap_max * 1.2
+    df_ap_m["AP비중_시각화"] = (df_ap_m["AP비중"]/ratio_max) * ap_max * 1.5
 
     fig_ap = go.Figure()
     fig_ap.add_bar(
@@ -178,12 +178,12 @@ if not df_ap_m.empty:
         mode="lines+markers+text",
         text=df_ap_m["AP비중"].round(2).astype(str) + "%",
         textposition="top center",
-        textfont=dict(size=13, color="red", family="Arial Black"), # 비중 글씨도 진하게
+        textfont=dict(size=11, color="red"), # 비중 글씨도 진하게
         name="AP 비중 (%)",
-        line=dict(color='red', width=3)
+        line=dict(color='red', width=1)
     )
     # 상단 여백 확보를 위해 y축 범위 자동 조절
-    fig_ap.update_yaxes(range=[0, ap_max * 1.5]) 
+    fig_ap.update_yaxes(range=[0, ap_max * 2]) 
     
     st.markdown("<div class='graph-box'><div class='graph-header'><h3>AP 월별 추이 (유효시장 대비)</h3></div></div>", unsafe_allow_html=True)
     st.plotly_chart(fig_ap, use_container_width=True)
