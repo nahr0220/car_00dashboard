@@ -1,6 +1,7 @@
-streamlit
-duckdb
-pandas
-plotly
+streamlit==1.53.0
+duckdb==0.10.3
+pandas==2.1.4
+plotly==5.18.0
 openpyxl
 xlsxwriter
+pyarrow==14.0.2
