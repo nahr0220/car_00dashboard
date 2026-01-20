@@ -1,5 +1,5 @@
 # ===============================================================
-# 자동차 이전등록 대시보드 (FINAL OPTIMIZED + UI RESTORED)
+# 자동차 이전등록 대시보드 (FINAL VISUAL POLISHED)
 # ===============================================================
 
 import duckdb
@@ -108,7 +108,6 @@ where = f"연월번호 BETWEEN {start_p} AND {end_p}"
 market_type = st.radio("시장 구분", ["전체","중고차시장","유효시장","마케팅"], horizontal=True)
 if market_type != "전체": where += f" AND {market_type}=1"
 
-# 엑셀 생성 함수
 def create_excel_to_disk(g1_data, current_where):
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
     path = tmp.name
@@ -120,7 +119,6 @@ def create_excel_to_disk(g1_data, current_where):
 
 with f3:
     if st.button("📥 엑셀 생성 및 다운로드"):
-        # 생성 전 집계 데이터 미리 확보
         g_excel = con.execute(f"SELECT 연월라벨, 이전등록유형, COUNT(*) AS 건수 FROM df WHERE {where} GROUP BY 연월번호, 연월라벨, 이전등록유형 ORDER BY 연월번호").df()
         path = create_excel_to_disk(g_excel, where)
         with open(path, "rb") as f:
@@ -128,13 +126,12 @@ with f3:
 st.markdown("</div>", unsafe_allow_html=True)
 
 # ---------------------------------------------------------------
-# Graph 1: 월별 이전등록유형 추이 (숫자 표시 추가)
+# Graph 1: 월별 이전등록유형 추이 (글씨 진하게 수정)
 # ---------------------------------------------------------------
 g1 = con.execute(f"SELECT 연월라벨, 이전등록유형, COUNT(*) AS 건수 FROM df WHERE {where} GROUP BY 연월번호, 연월라벨, 이전등록유형 ORDER BY 연월번호").df()
 g_total = g1.groupby("연월라벨")["건수"].sum().reset_index()
 
 fig1 = go.Figure()
-# 막대 그래프에 숫자 표시 설정
 fig1.add_bar(
     x=g_total["연월라벨"], 
     y=g_total["건수"], 
@@ -142,7 +139,8 @@ fig1.add_bar(
     opacity=0.3,
     text=g_total["건수"],
     textposition='outside',
-    texttemplate='%{text:,}' # 천단위 콤마
+    texttemplate='<b>%{text:,}</b>', # <b> 태그로 진하게 설정
+    textfont=dict(size=14, color="black")
 )
 for t in g1["이전등록유형"].unique():
     d = g1[g1["이전등록유형"]==t]
@@ -152,34 +150,46 @@ st.markdown("<div class='graph-box'><div class='graph-header'><h3>월별 이전�
 st.plotly_chart(fig1, use_container_width=True)
 
 # ---------------------------------------------------------------
-# Graph 2: AP 월별 추이 (라인 및 비중 복구)
+# Graph 2: AP 월별 추이 (비중 위치 한참 위로 수정)
 # ---------------------------------------------------------------
 valid_m = con.execute(f"SELECT 연월번호, 연월라벨, COUNT(*) AS 유효시장건수 FROM df WHERE 유효시장=1 GROUP BY 연월번호, 연월라벨").df()
 df_ap_m = pd.merge(df_ap, valid_m, on=["연월번호","연월라벨"], how="inner")
 
 if not df_ap_m.empty:
     df_ap_m["AP비중"] = df_ap_m["AP"]/df_ap_m["유효시장건수"]*100
-    # 비중을 막대 높이에 맞춰 스케일링 (기존 로직)
     ap_max = df_ap_m["AP"].max() if not df_ap_m["AP"].empty else 1
     ratio_max = df_ap_m["AP비중"].max() if not df_ap_m["AP비중"].empty else 1
-    df_ap_m["AP비중_시각화"] = (df_ap_m["AP비중"]/ratio_max) * ap_max * 0.8
+    
+    # 비중 위치를 막대 최대값보다 더 위쪽(1.2배 지점)으로 보정하여 '한참 위로' 배치
+    df_ap_m["AP비중_시각화"] = (df_ap_m["AP비중"]/ratio_max) * ap_max * 1.2
 
     fig_ap = go.Figure()
-    fig_ap.add_bar(x=df_ap_m["연월라벨"], y=df_ap_m["AP"], name="AP 판매량", text=df_ap_m["AP"], textposition='outside')
+    fig_ap.add_bar(
+        x=df_ap_m["연월라벨"], 
+        y=df_ap_m["AP"], 
+        name="AP 판매량", 
+        text=df_ap_m["AP"], 
+        textposition='outside',
+        texttemplate='<b>%{text:,}</b>'
+    )
     fig_ap.add_scatter(
         x=df_ap_m["연월라벨"], 
         y=df_ap_m["AP비중_시각화"], 
         mode="lines+markers+text",
         text=df_ap_m["AP비중"].round(2).astype(str) + "%",
         textposition="top center",
+        textfont=dict(size=13, color="red", family="Arial Black"), # 비중 글씨도 진하게
         name="AP 비중 (%)",
         line=dict(color='red', width=3)
     )
+    # 상단 여백 확보를 위해 y축 범위 자동 조절
+    fig_ap.update_yaxes(range=[0, ap_max * 1.5]) 
+    
     st.markdown("<div class='graph-box'><div class='graph-header'><h3>AP 월별 추이 (유효시장 대비)</h3></div></div>", unsafe_allow_html=True)
     st.plotly_chart(fig_ap, use_container_width=True)
 
 # ---------------------------------------------------------------
-# Graph 3 & 4 (집계형 유지)
+# Graph 3 & 4
 # ---------------------------------------------------------------
 age_data = con.execute(f"SELECT 나이, COUNT(*) AS 건수 FROM df WHERE {where} AND 나이!='법인및사업자' GROUP BY 나이 ORDER BY 나이").df()
 gender_data = con.execute(f"SELECT 성별, COUNT(*) AS 건수 FROM df WHERE {where} AND 나이!='법인및사업자' GROUP BY 성별").df()
@@ -188,6 +198,7 @@ st.markdown("<div class='graph-box'><div class='graph-header'><h3>연령·성별
 c_age, c_gender = st.columns([4, 2])
 with c_age:
     fig_age = px.bar(age_data, x="건수", y="나이", orientation="h", text_auto=',.0f')
+    fig_age.update_traces(texttemplate='<b>%{text}</b>', textposition='outside')
     st.plotly_chart(fig_age, use_container_width=True)
 with c_gender:
     st.plotly_chart(px.pie(gender_data, values="건수", names="성별", hole=0.5), use_container_width=True)
