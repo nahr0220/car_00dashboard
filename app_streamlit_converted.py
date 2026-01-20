@@ -3,6 +3,8 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+
+BASE_DIR = Path(__file__).resolve().parent
 from io import BytesIO
 from pathlib import Path
 import os
