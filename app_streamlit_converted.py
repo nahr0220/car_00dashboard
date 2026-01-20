@@ -1,14 +1,24 @@
+# ===============================
+# 필수 import (순서 절대 변경 금지)
+# ===============================
 import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
-from io import BytesIO
-from pathlib import Path
-import os
-import glob
 
-BASE_DIR = Path(__file__).resolve().parent  
+from pathlib import Path
+from io import BytesIO
+
+import glob
+import os
+import traceback
+
+# ===============================
+# 기준 경로 (Streamlit Cloud 대응)
+# ===============================
+BASE_DIR = Path(__file__).resolve().parent
+DATA_DIR = BASE_DIR / "data"
 # ========================================
 # 1. 페이지 설정 (최초 Streamlit 명령)
 # ========================================
@@ -686,3 +696,10 @@ st.markdown(
     unsafe_allow_html=True,
 )
 st.plotly_chart(fig_age_line, use_container_width=True)
+
+try:
+    pass
+except Exception:
+    st.error("🔥 실행 중 에러 발생")
+    st.text(traceback.format_exc())
+    raise
