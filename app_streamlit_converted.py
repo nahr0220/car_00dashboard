@@ -114,20 +114,21 @@ def load_data_v2():
     return df, df_ap, period_options, period_to_label
 # --- 데이터 호출 및 실행 (Cloud 안전 버전) --
 
-try:
-    df, df_ap, period_options, period_to_label = load_data_v2()
+# try:
+#     df, df_ap, period_options, period_to_label = load_data_v2()
 
-    st.success(f"✅ 앱 실행 성공 · 데이터 {len(df):,}행 로드 완료")
+#     st.success(f"✅ 앱 실행 성공 · 데이터 {len(df):,}행 로드 완료")
 
-    # ✅ 여기부터 기존 대시보드 코드 시작
-    st.markdown("## 자동차 이전등록 대시보드")
-    # 기존 KPI / 그래프 코드 붙여넣기
+#     # ✅ 여기부터 기존 대시보드 코드 시작
+#     st.markdown("## 자동차 이전등록 대시보드")
+#     # 기존 KPI / 그래프 코드 붙여넣기
 
-except Exception:
-    st.error("🔥 실행 중 에러 발생")
-    st.text(traceback.format_exc())
-    st.stop()
-
+# except Exception:
+#     st.error("🔥 실행 중 에러 발생")
+#     st.text(traceback.format_exc())
+#     st.stop()
+st.success("🚀 앱 기본 실행 성공")
+st.stop()
 
 # ========================================
 # 4. 제목
