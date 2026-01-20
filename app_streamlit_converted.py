@@ -72,7 +72,7 @@ df_ap["연월라벨"] = df_ap["년도"].astype(str)+"-"+df_ap["월"].astype(str)
 # Periods
 # ---------------------------------------------------------------
 periods = con.execute(
-    "SELECT DISTINCT 연월번호, 연월라벨 FROM df ORDER BY 연월번호"
+    'SELECT DISTINCT "연월번호", "연월라벨" FROM df ORDER BY "연월번호"'
 ).df()
 period_to_label = dict(zip(periods["연월번호"], periods["연월라벨"]))
 
