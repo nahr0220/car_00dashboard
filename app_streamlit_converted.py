@@ -203,7 +203,7 @@ with f3:
                 ORDER BY 건수 DESC
             """).df()
 
-            sido.to_excel(w, sheet_name="시/도별_분포", index=False)
+            sido.to_excel(w, sheet_name="시도별_분포", index=False)
 
         with open(path, "rb") as f:
             st.download_button(
