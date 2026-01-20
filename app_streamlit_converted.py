@@ -1,5 +1,5 @@
 # ===============================================================
-# 자동차 이전등록 대시보드 (KPI MoM + Tooltip 추가 버전)
+# 자동차 이전등록 대시보드 (KPI MoM + HELP TOOLTIP)
 # ===============================================================
 
 import duckdb
@@ -30,20 +30,6 @@ st.markdown("""
 }
 .graph-header {
     background:#E3F2FD; padding:16px; border-radius:10px;
-}
-/* 툴팁 아이콘 스타일 */
-.help-icon {
-    display: inline-block;
-    width: 18px;
-    height: 18px;
-    background-color: #666;
-    color: white;
-    border-radius: 50%;
-    text-align: center;
-    line-height: 18px;
-    font-size: 12px;
-    cursor: help;
-    margin-left: 5px;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -81,7 +67,7 @@ periods = con.execute('SELECT DISTINCT "연월번호", "연월라벨" FROM df OR
 period_to_label = dict(zip(periods["연월번호"], periods["연월라벨"]))
 
 # ---------------------------------------------------------------
-# KPI 계산 (중고차 비중 MoM 추가)
+# KPI: 중고차 비중 MoM 추가 계산
 # ---------------------------------------------------------------
 cur_period = int(periods["연월번호"].max())
 cur_year, cur_month = divmod(cur_period,100)
@@ -89,16 +75,14 @@ cur_year, cur_month = divmod(cur_period,100)
 def get_count(p_sql):
     return con.execute(p_sql).fetchone()[0]
 
-# 현재/이전달 전체 거래량
 cur_cnt = get_count(f"SELECT COUNT(*) FROM df WHERE 연월번호={cur_period}")
 prev_period = (cur_year*100+cur_month-1) if cur_month>1 else ((cur_year-1)*100+12)
 prev_cnt = get_count(f"SELECT COUNT(*) FROM df WHERE 연월번호={prev_period}")
 
-# 전년 동월 거래량
 yoy_period = (cur_year-1)*100+cur_month
 yoy_cnt = get_count(f"SELECT COUNT(*) FROM df WHERE 연월번호={yoy_period}")
 
-# 중고차 비중 및 이전달 비중 계산
+# 중고차 비중 계산
 used_cur = get_count(f"SELECT COUNT(*) FROM df WHERE 연월번호={cur_period} AND 중고차시장=1")
 ratio_cur = used_cur/cur_cnt*100 if cur_cnt else 0
 
@@ -108,7 +92,7 @@ ratio_prev = used_prev/prev_cnt*100 if prev_cnt else 0
 # 지표 변동율
 mom = (cur_cnt-prev_cnt)/prev_cnt*100 if prev_cnt else 0
 yoy = (cur_cnt-yoy_cnt)/yoy_cnt*100 if yoy_cnt else 0
-ratio_mom = ratio_cur - ratio_prev # 비중은 퍼센트 포인트(p) 차이로 표시
+ratio_mom = ratio_cur - ratio_prev # 전월 대비 %p 차이
 
 st.markdown("## 자동차 이전등록 대시보드")
 c1,c2,c3 = st.columns(3)
@@ -122,7 +106,7 @@ with c3:
     st.markdown(f"<div class='kpi-box'><h4>중고차 비중</h4><h2>{ratio_cur:.1f}%</h2><div><span style='color:{r_mom_c}'>{ratio_mom:+.1f}%p MoM</span></div></div>", unsafe_allow_html=True)
 
 # ---------------------------------------------------------------
-# Filters & Tooltip
+# Filters & Tooltip (? 아이콘 도움말 추가)
 # ---------------------------------------------------------------
 st.markdown('<div class="filter-box">', unsafe_allow_html=True)
 f1,f2,f3 = st.columns([1,1,0.6])
@@ -132,16 +116,16 @@ with f2: end_p = st.selectbox("종료 연월", periods["연월번호"], index=le
 if start_p > end_p: start_p, end_p = end_p, start_p
 where = f"연월번호 BETWEEN {start_p} AND {end_p}"
 
-# 시장구분 툴팁 구현
-market_help = """
-각 시장의 정의는 다음과 같습니다:
-- 전체: 모든 이전등록 데이터
-- 중고차시장: 실제 중고 거래가 발생한 시장
-- 유효시장: 마케팅 타겟이 되는 핵심 시장
-- 마케팅: 특정 캠페인 대상 범위
+# 시장구분 도움말 (마우스 올리면 나오는 메시지)
+market_help_msg = """
+**각 시장의 정의:**
+- **전체**: 모든 이전등록 데이터 포함
+- **중고차시장**: 실제 중고차 매매 거래
+- **유효시장**: 타겟 마케팅이 가능한 유효 범위
+- **마케팅**: 캠페인 진행 대상 필터링
 """
-st.write(f'시장 구분 <span class="help-icon" title="{market_help}">?</span>', unsafe_allow_html=True)
-market_type = st.radio("시장 선택", ["전체","중고차시장","유효시장","마케팅"], horizontal=True, label_visibility="collapsed")
+# help 인자를 사용하여 (?) 아이콘 툴팁 구현
+market_type = st.radio("시장 구분 선택", ["전체","중고차시장","유효시장","마케팅"], horizontal=True, help=market_help_msg)
 
 if market_type != "전체": where += f" AND {market_type}=1"
 
@@ -166,14 +150,9 @@ g_total = g1.groupby("연월라벨")["건수"].sum().reset_index()
 
 fig1 = go.Figure()
 fig1.add_bar(
-    x=g_total["연월라벨"], 
-    y=g_total["건수"], 
-    name="전체", 
-    opacity=0.3,
-    text=g_total["건수"],
-    textposition='outside',
-    texttemplate='<b>%{text:,}</b>',
-    textfont=dict(size=20, color="black")
+    x=g_total["연월라벨"], y=g_total["건수"], name="전체", opacity=0.3,
+    text=g_total["건수"], textposition='outside',
+    texttemplate='<b>%{text:,}</b>', textfont=dict(size=20, color="black")
 )
 for t in g1["이전등록유형"].unique():
     d = g1[g1["이전등록유형"]==t]
@@ -204,12 +183,11 @@ if not df_ap_m.empty:
     fig_ap.add_scatter(
         x=df_ap_m["연월라벨"], y=df_ap_m["AP비중_시각화"], 
         mode="lines+markers+text", text=df_ap_m["AP비중"].round(2).astype(str) + "%",
-        textposition="top center", textfont=dict(size=18, color="red", family="Arial Black"), 
+        textposition="top center", textfont=dict(size=12, color="red", family="Arial Black"), 
         name="AP 비중 (%)", line=dict(color='red', width=3)
     )
     fig_ap.update_layout(xaxis=dict(ticks=""), yaxis=dict(ticks=""))
     fig_ap.update_yaxes(range=[0, ap_max * 2.0])
-    
     st.markdown("<div class='graph-box'><div class='graph-header'><h3>AP 월별 추이 (유효시장 대비)</h3></div></div>", unsafe_allow_html=True)
     st.plotly_chart(fig_ap, use_container_width=True)
 
