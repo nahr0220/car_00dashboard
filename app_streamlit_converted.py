@@ -140,7 +140,7 @@ fig1.add_bar(
     text=g_total["건수"],
     textposition='outside',
     texttemplate='<b>%{text:,}</b>', # <b> 태그로 진하게 설정
-    textfont=dict(size=14, color="black",family="Arial")
+    textfont=dict(size=18, color="black")
 )
 for t in g1["이전등록유형"].unique():
     d = g1[g1["이전등록유형"]==t]
