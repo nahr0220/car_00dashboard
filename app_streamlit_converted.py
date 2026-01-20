@@ -137,16 +137,20 @@ with f3:
 
         with pd.ExcelWriter(path, engine="xlsxwriter") as w:
 
-            # 1️⃣ 월별 건수 (기존 유지)
-            monthly_cnt = con.execute(f"""
-                SELECT 연월라벨, COUNT(*) AS 건수
+           # 1️⃣ 월별 건수 (연월 × 이전등록유형)
+            monthly_type_cnt = con.execute(f"""
+                SELECT 연월라벨, 이전등록유형, COUNT(*) AS 건수
                 FROM df
                 WHERE {where}
-                GROUP BY 연월번호, 연월라벨
+                GROUP BY 연월번호, 연월라벨, 이전등록유형
                 ORDER BY 연월번호
             """).df()
 
-            monthly_cnt.to_excel(w, sheet_name="월별_건수", index=False)
+            monthly_type_cnt.pivot(
+                index="연월라벨",        # 세로
+                columns="이전등록유형",  # 가로
+                values="건수"
+            ).fillna(0).to_excel(w, sheet_name="월별_이전등록유형_건수")
 
             # 2️⃣ 월별 연령·성별 분포
             age_gender_m = con.execute(f"""
@@ -158,8 +162,8 @@ with f3:
             """).df()
 
             age_gender_m.pivot_table(
-                index=["연월라벨", "나이"],
-                columns="성별",
+                index="연월라벨",
+                columns=["나이", "성별"],
                 values="건수",
                 fill_value=0
             ).to_excel(w, sheet_name="월별_연령성별_분포")
@@ -194,17 +198,21 @@ with f3:
                 values="건수"
             ).fillna(0).to_excel(w, sheet_name="월별_취득금액_범위")
 
-            # 5️⃣ 시/도별 분포
-            sido = con.execute(f"""
-                SELECT "시/도", COUNT(*) AS 건수
+            # 5️⃣ 월별 시/도 분포
+            sido_m = con.execute(f"""
+                SELECT 연월라벨, "시/도" AS 시도, COUNT(*) AS 건수
                 FROM df
                 WHERE {where}
-                GROUP BY "시/도"
-                ORDER BY 건수 DESC
+                GROUP BY 연월번호, 연월라벨, "시/도"
+                ORDER BY 연월번호
             """).df()
 
-            sido.to_excel(w, sheet_name="시도별_분포", index=False)
-
+            sido_m.pivot(
+                index="연월라벨",   # 세로: 월
+                columns="시도",     # 가로: 시/도
+                values="건수"
+            ).fillna(0).to_excel(w, sheet_name="월별_시도별_분포")
+            
         with open(path, "rb") as f:
             st.download_button(
                 "✅ 준비완료! 파일 다운로드",
