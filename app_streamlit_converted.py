@@ -150,13 +150,13 @@ with f3:
                 index="연월라벨",        # 세로
                 columns="이전등록유형",  # 가로
                 values="건수"
-            ).fillna(0).to_excel(w, sheet_name="월별_이전등록유형_건수")
+            ).fillna(0).to_excel(w, sheet_name="이전등록유형_분포")
 
             # 2️⃣ 월별 연령·성별 분포
             age_gender_m = con.execute(f"""
                 SELECT 연월라벨, 나이, 성별, COUNT(*) AS 건수
                 FROM df
-                WHERE {where} AND 나이!='법인및사업자'
+                WHERE {where}
                 GROUP BY 연월번호, 연월라벨, 나이, 성별
                 ORDER BY 연월번호
             """).df()
@@ -166,7 +166,7 @@ with f3:
                 columns=["나이", "성별"],
                 values="건수",
                 fill_value=0
-            ).to_excel(w, sheet_name="월별_연령성별_분포")
+            ).to_excel(w, sheet_name="연령성별_분포")
 
             # 3️⃣ 월별 주행거리 범위
             mileage_m = con.execute(f"""
@@ -181,7 +181,7 @@ with f3:
                 index="연월라벨",
                 columns="주행거리_범위",
                 values="건수"
-            ).fillna(0).to_excel(w, sheet_name="월별_주행거리_범위")
+            ).fillna(0).to_excel(w, sheet_name="주행거리_분포")
 
             # 4️⃣ 월별 취득금액 범위
             price_m = con.execute(f"""
@@ -196,7 +196,7 @@ with f3:
                 index="연월라벨",
                 columns="취득금액_범위",
                 values="건수"
-            ).fillna(0).to_excel(w, sheet_name="월별_취득금액_범위")
+            ).fillna(0).to_excel(w, sheet_name="취득금액_분포")
 
             # 5️⃣ 월별 시/도 분포
             sido_m = con.execute(f"""
@@ -211,7 +211,7 @@ with f3:
                 index="연월라벨",   # 세로: 월
                 columns="시도",     # 가로: 시/도
                 values="건수"
-            ).fillna(0).to_excel(w, sheet_name="월별_시도별_분포")
+            ).fillna(0).to_excel(w, sheet_name="시도별_분포")
             
         with open(path, "rb") as f:
             st.download_button(
