@@ -306,8 +306,8 @@ gender_data = con.execute(f"SELECT 성별, COUNT(*) AS 건수 FROM df WHERE {whe
 st.markdown("<div class='graph-box'><div class='graph-header'><h3>연령·성별 현황</h3></div></div>", unsafe_allow_html=True)
 c_age, c_gender = st.columns([4, 2])
 with c_age:
-    fig_age = px.bar(age_data, x="건수", y="나이", orientation="h", text=age_data["건수"].map(lambda x: f"{x:,.0f}"))
-    fig_age.update_traces(texttemplate='<b>%{text}</b>', textposition='outside', textfont=dict(size=18, color="black"),cliponaxis=False)
+    fig_age = px.bar(age_data, x="건수", y="나이", orientation="h")
+    # fig_age.update_traces(texttemplate='<b>%{text}</b>', textposition='outside', textfont=dict(size=18, color="black"),cliponaxis=False)
     fig_age.update_layout(xaxis=dict(ticks="", tickformat=","), yaxis=dict(ticks=""))
     st.plotly_chart(fig_age, use_container_width=True)
 
