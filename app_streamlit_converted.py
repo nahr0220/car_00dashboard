@@ -93,31 +93,31 @@ if not periods.empty:
         excel_btn = st.button("📥 엑셀 리포트 생성")
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # 6. 엑셀 생성 (가장 가벼운 피벗 방식)
+    # 6. 엑셀 생성 (속도와 안전의 절충안)
     if excel_btn:
-        with st.spinner("데이터를 분할하여 안전하게 엑셀 생성 중..."):
+        with st.spinner("엑셀 생성 중..."):
             tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
+            
+            # [수정] 모든 시트에 필요한 컬럼만 딱 한 번만 쿼리 (속도 업!)
+            needed_cols = ["연월라벨", "이전등록유형", "나이", "성별", "주행거리_범위", "취득금액_범위", "\"시/도\"", "\"구/군\""]
+            df_ex = con.execute(f"SELECT {', '.join(needed_cols)} FROM df WHERE {where}").df()
+            
+            # 법인 데이터 전처리 (한 번만 수행)
+            if "나이" in df_ex.columns:
+                df_ex.loc[df_ex["나이"] == "법인및사업자", "성별"] = "법인및사업자"
+
             with pd.ExcelWriter(tmp.name, engine="xlsxwriter") as w:
-                # 대량의 데이터를 한 번에 가져오지 않고 시트별로 필요한 컬럼만 쿼리해서 전송
-                sheets = [
-                    ("이전등록유형", ["연월라벨", "이전등록유형"]),
-                    ("나이_성별", ["연월라벨", "나이", "성별"]),
-                    ("주행거리", ["연월라벨", "주행거리_범위"]),
-                    ("취득금액", ["연월라벨", "취득금액_범위"]),
-                    ("지역", ["연월라벨", "\"시/도\""]),
-                    ("상세지역", ["연월라벨", "\"시/도\"", "\"구/군\""])
-                ]
-                for s_name, cols in sheets:
-                    try:
-                        col_str = ", ".join(cols)
-                        temp_df = con.execute(f"SELECT {col_str} FROM df WHERE {where}").df()
-                        if "나이" in temp_df.columns:
-                            temp_df.loc[temp_df["나이"] == "법인및사업자", "성별"] = "법인및사업자"
-                        
-                        idx = cols[0]
-                        cols_pivot = cols[1:]
-                        temp_df.pivot_table(index=idx, columns=cols_pivot, aggfunc="size", fill_value=0).to_excel(w, sheet_name=s_name)
-                    except: continue
+                # 메모리에 올라온 df_ex를 활용해 6개 시트 순식간에 작성
+                df_ex.pivot_table(index="연월라벨", columns="이전등록유형", aggfunc="size", fill_value=0).to_excel(w, sheet_name="이전등록유형_분포")
+                df_ex.pivot_table(index=["나이", "성별"], columns="연월라벨", aggfunc="size", fill_value=0).to_excel(w, sheet_name="연령성별_분포")
+                
+                for col, s_name in zip(["주행거리_범위", "취득금액_범위", "\"시/도\""], ["주행거리", "취득금액", "지역"]):
+                    clean_col = col.replace('"', '') # 쿼리용 따옴표 제거
+                    if clean_col in df_ex.columns:
+                        df_ex.pivot_table(index=clean_col, columns="연월라벨", aggfunc="size", fill_value=0).to_excel(w, sheet_name=s_name)
+                
+                if "시/도" in df_ex.columns and "구/군" in df_ex.columns:
+                    df_ex.pivot_table(index=["시/도", "구/군"], columns="연월라벨", aggfunc="size", fill_value=0).to_excel(w, sheet_name="상세지역")
 
             with open(tmp.name, "rb") as f:
                 st.download_button("✅ 다운로드 받기", f, file_name=f"REPORT_{m_type}.xlsx")
