@@ -119,7 +119,7 @@ if st.button("📥 엑셀 생성 및 다운로드", key="excel_download"):
                 price_m.pivot(index="연월라벨", columns="취득금액_범위", values="건수").fillna(0).to_excel(w, sheet_name="취득금액_분포") 
                 sido_m = con.execute(f"SELECT 연월라벨, \"시/도\" AS 시도, COUNT(*) AS 건수 FROM df WHERE {where} GROUP BY 연월번호, 연월라벨, \"시/도\" ORDER BY 연월번호").df() 
                 sido_m.pivot(index="연월라벨", columns="시도", values="건수").fillna(0).to_excel(w, sheet_name="지역별_분포") 
-            with open(path, "rb") as f: st.download_button("✅ 다운로드", f, file_name=f"이전등록_{period_to_label.get(start_p, 'N/A')}_{period_to_label.get(end_p, 'N/A')}.xlsx") 
+            with open(path, "rb") as f: st.download_button("✅ 다운로드", f, file_name=f"이전등록_{period_to_label.get(start_p, 'N/A')}_{period_to_label.get(end_p, 'N/A')}_{market_type}.xlsx") 
     except Exception as e: st.error(f"❌ 엑셀 생성 실패: {e}") 
 st.markdown("</div>", unsafe_allow_html=True) 
 
