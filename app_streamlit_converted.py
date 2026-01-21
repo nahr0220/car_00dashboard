@@ -281,7 +281,7 @@ c_age, c_gender = st.columns([4, 2])
 with c_age:
     fig_age = px.bar(age_data, x="건수", y="나이", orientation="h", text_auto=',.0f')
     fig_age.update_traces(texttemplate='<b>%{text}</b>', textposition='outside', textfont=dict(size=18, color="black"))
-    fig_age.update_layout(xaxis=dict(ticks=""), yaxis=dict(ticks="", tickformat=","))
+    fig_age.update_layout(xaxis=dict(ticks="", tickformat=","), yaxis=dict(ticks=""))
     st.plotly_chart(fig_age, use_container_width=True)
 
 with c_gender:
