@@ -95,7 +95,11 @@ with f1: start_p = st.selectbox("시작 연월", periods["연월번호"], format
 with f2: end_p = st.selectbox("종료 연월", periods["연월번호"], index=len(periods)-1, format_func=lambda x: period_to_label.get(x, str(x))) 
 if start_p > end_p: start_p, end_p = end_p, start_p 
 where = f"연월번호 BETWEEN {start_p} AND {end_p}" 
-market_help_msg = """**출처: 국토교통부 자료** - **전체**: 국토교통부의 자동차 이전 데이터 전체 - **중고차시장**: 이전 데이터 전체 중 개인 간 거래대수를 포함한 사업자 거래대수 (개인거래 + 매도 + 상사이전 + 알선) - **유효시장**: 이전 데이터 전체 중 개인 간 거래대수를 제외한 사업자 거래대수 (매도 + 상사이전 + 알선) - **마케팅**: 마케팅팀이 사전에 정의한 필터링 기준에 따라, 이전등록구분명이 '매매업자거래이전'이며 등록상세명이 '일반소유용'인 이전 등록 건""" 
+market_help_msg = """**출처: 국토교통부 자료** 
+- **전체**: 국토교통부의 자동차 이전 데이터 전체 
+- **중고차시장**: 이전 데이터 전체 중 개인 간 거래대수를 포함한 사업자 거래대수 (개인거래 + 매도 + 상사이전 + 알선) 
+- **유효시장**: 이전 데이터 전체 중 개인 간 거래대수를 제외한 사업자 거래대수 (매도 + 상사이전 + 알선) 
+- **마케팅**: 마케팅팀이 사전에 정의한 필터링 기준에 따라, 이전등록구분명이 '매매업자거래이전'이며 등록상세명이 '일반소유용'인 이전 등록 건""" 
 market_type = st.radio("시장 구분 선택", ["전체","중고차시장","유효시장","마케팅"], horizontal=True, help=market_help_msg) 
 if market_type != "전체": where += f" AND {market_type}=1" 
 
