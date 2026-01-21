@@ -1,5 +1,5 @@
 # =============================================================== 
-# 자동차 이전등록 대시보드 (에러 방지 + 종료월 KPI + 차트 경고 해결)
+# 자동차 이전등록 대시보드 (KPI + 엑셀 다운로드 완벽 복구 버전) 
 # =============================================================== 
 import duckdb 
 import pandas as pd 
@@ -43,28 +43,19 @@ try:
 except: 
     df_ap = pd.DataFrame(columns=["연월번호", "연월라벨", "AP"]) 
 
-# 기간 목록 미리 가져오기
 periods = con.execute('SELECT DISTINCT "연월번호", "연월라벨" FROM df ORDER BY "연월번호"').df() 
-if periods.empty:
-    st.error("데이터가 비어있습니다.")
-    st.stop()
+if periods.empty: st.stop()
 period_to_label = dict(zip(periods["연월번호"], periods["연월라벨"])) 
 
 # --------------------------------------------------------------- # Filters # --------------------------------------------------------------- 
 st.markdown("<h1 style='font-size:36px;'>자동차 이전등록 대시보드</h1>", unsafe_allow_html=True) 
-
 st.markdown('<div class="filter-box">', unsafe_allow_html=True) 
 f1, f2, f3 = st.columns([1, 1, 0.6]) 
 
-with f1: 
-    start_p = st.selectbox("시작 연월", periods["연월번호"], format_func=lambda x: period_to_label.get(x, str(x))) 
-with f2: 
-    end_p = st.selectbox("종료 연월", periods["연월번호"], index=len(periods)-1, format_func=lambda x: period_to_label.get(x, str(x))) 
+with f1: start_p = st.selectbox("시작 연월", periods["연월번호"], format_func=lambda x: period_to_label.get(x, str(x))) 
+with f2: end_p = st.selectbox("종료 연월", periods["연월번호"], index=len(periods)-1, format_func=lambda x: period_to_label.get(x, str(x))) 
 
-# [수정] NoneType 비교 에러 방지
-if start_p is None or end_p is None:
-    st.stop()
-
+if start_p is None or end_p is None: st.stop()
 if start_p > end_p:
     st.error("⚠️ 시작 연월이 종료 연월보다 큽니다. 기간을 다시 선택하세요.")
     st.stop()
@@ -78,55 +69,45 @@ market_help_msg = """**출처: 국토교통부 자료**
 market_type = st.radio("시장 구분 선택", ["전체","중고차시장","유효시장","마케팅"], horizontal=True, help=market_help_msg) 
 if market_type != "전체": where += f" AND {market_type}=1" 
 
-# --------------------------------------------------------------- # KPI 계산 # --------------------------------------------------------------- 
-# 쿼리 안전 실행 함수
+# --------------------------------------------------------------- # KPI & Excel Download # --------------------------------------------------------------- 
 def safe_query(q):
     res = con.execute(q).fetchone()
     return res[0] if res and res[0] is not None else 0
 
-# 1. 선택 기간 누적 거래량
 total_range_cnt = safe_query(f"SELECT COUNT(*) FROM df WHERE {where}")
-
-# 2. 종료 연월(선택한 달)의 거래량
 end_month_where = f"연월번호 = {end_p}"
 if market_type != "전체": end_month_where += f" AND {market_type}=1"
 end_month_cnt = safe_query(f"SELECT COUNT(*) FROM df WHERE {end_month_where}")
-end_month_label = period_to_label.get(end_p, "N/A")
-
-# 3. 중고차 비중 (평균)
 used_cnt = safe_query(f"SELECT COUNT(*) FROM df WHERE {where} AND 중고차시장=1")
 ratio_avg = (used_cnt / total_range_cnt * 100) if total_range_cnt > 0 else 0
 
-# --------------------------------------------------------------- # KPI 대시보드 표시 # --------------------------------------------------------------- 
-st.write("") 
 c1, c2, c3 = st.columns(3) 
 with c1: st.markdown(f"<div class='kpi-box'><h4>선택 기간 누적 거래량</h4><h2>{total_range_cnt:,}건</h2></div>", unsafe_allow_html=True) 
-with c2: st.markdown(f"<div class='kpi-box'><h4>{end_month_label} 거래량</h4><h2>{end_month_cnt:,}건</h2></div>", unsafe_allow_html=True) 
+with c2: st.markdown(f"<div class='kpi-box'><h4>{period_to_label.get(end_p)} 거래량</h4><h2>{end_month_cnt:,}건</h2></div>", unsafe_allow_html=True) 
 with c3: st.markdown(f"<div class='kpi-box'><h4>중고차 시장 비중 (평균)</h4><h2>{ratio_avg:.1f}%</h2></div>", unsafe_allow_html=True) 
 
-# 엑셀 다운로드 (버튼만 유지)
+# 엑셀 다운로드 (로직 복구 완료)
 if st.button("📥 엑셀 생성 및 다운로드", key="excel_download"): 
-    pass
-st.markdown("</div>", unsafe_allow_html=True)
+    try: 
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp: 
+            path = tmp.name 
+            with pd.ExcelWriter(path, engine="xlsxwriter") as w: 
+                con.execute(f"SELECT 연월라벨, 이전등록유형, COUNT(*) AS 건수 FROM df WHERE {where} GROUP BY 연월번호, 연월라벨, 이전등록유형 ORDER BY 연월번호").df().pivot(index="연월라벨", columns="이전등록유형", values="건수").fillna(0).to_excel(w, sheet_name="월별_이전등록유형_건수") 
+                age_gender = con.execute(f"SELECT 연월라벨, 나이, 성별, COUNT(*) AS 건수 FROM df WHERE {where} GROUP BY 연월번호, 연월라벨, 나이, 성별 ORDER BY 연월번호").df() 
+                age_gender.pivot_table(index="연월라벨", columns=["나이", "성별"], values="건수", fill_value=0).to_excel(w, sheet_name="연령성별_분포") 
+                con.execute(f"SELECT 연월라벨, 주행거리_범위, COUNT(*) AS 건수 FROM df WHERE {where} GROUP BY 연월번호, 연월라벨, 주행거리_범위 ORDER BY 연월번호").df().pivot(index="연월라벨", columns="주행거리_범위", values="건수").fillna(0).to_excel(w, sheet_name="주행거리_분포") 
+                con.execute(f"SELECT 연월라벨, \"시/도\" AS 시도, COUNT(*) AS 건수 FROM df WHERE {where} GROUP BY 연월번호, 연월라벨, \"시/도\" ORDER BY 연월번호").df().pivot(index="연월라벨", columns="시도", values="건수").fillna(0).to_excel(w, sheet_name="지역별_분포") 
+            with open(path, "rb") as f: 
+                st.download_button("✅ 다운로드 클릭", f, file_name=f"이전등록_{period_to_label.get(start_p)}_{period_to_label.get(end_p)}_{market_type}.xlsx") 
+    except Exception as e: st.error(f"❌ 엑셀 생성 실패: {e}") 
+st.markdown("</div>", unsafe_allow_html=True) 
 
 # --------------------------------------------------------------- # Graph 1: 월별 이전등록유형 추이 # --------------------------------------------------------------- 
-type_help_text = """중고차 거래(이전등록) 유형
-- 매입 : 자동차매매업자가 상품용으로 구매
-- 매도 : 자동차매매업자가 일반인에게 판매
-- 상사이전 : 매매업자 간 거래
-- 알선 : 매매업자가 중개 판매
-- 개인거래 : 당사자 간 직접 거래
-- 기타 : 상속, 증여 등"""
-
 st.markdown(f"""
     <div class="graph-box" style="margin-bottom: 0px;">
         <div class="graph-header" style="display: flex; justify-content: space-between; align-items: center; padding: 16px 20px;">
             <h3 style="margin: 0; padding: 0; border: none; font-weight: 800; color: #1E1E1E;">월별 이전등록유형 추이</h3>
-            <div title="{type_help_text}" style="
-                cursor: help; width: 22px; height: 22px; background-color: #5B9BD5; color: white;
-                border-radius: 50%; text-align: center; line-height: 22px; font-size: 14px; font-weight: bold;
-                display: flex; justify-content: center; align-items: center;
-            ">?</div>
+            <div title="마우스 오버 시 상세 도움말이 표시됩니다" style="cursor: help; width: 22px; height: 22px; background-color: #5B9BD5; color: white; border-radius: 50%; text-align: center; line-height: 22px; font-size: 14px; font-weight: bold; display: flex; justify-content: center; align-items: center;">?</div>
         </div>
     </div>
 """, unsafe_allow_html=True)
@@ -141,7 +122,7 @@ if not g1.empty:
         d = g1[g1["이전등록유형"]==t] 
         fig1.add_scatter(x=d["연월라벨"], y=d["건수"], mode="lines+markers", name=str(t)) 
     fig1.update_layout(xaxis=dict(ticks=""), yaxis=dict(ticks="", tickformat=","), margin=dict(t=20)) 
-    st.plotly_chart(fig1, width='stretch') # 경고 해결을 위해 width='stretch' 사용
+    st.plotly_chart(fig1, width='stretch')
 
 # --------------------------------------------------------------- # Graph 2: AP 월별 추이 # --------------------------------------------------------------- 
 st.markdown("<div class='graph-box'><div class='graph-header'><h3 style='font-weight: 800;'>AP 판매 추이 및 유효시장 점유율</h3></div></div>", unsafe_allow_html=True) 
