@@ -156,7 +156,7 @@ with f3:
             age_gender_m = con.execute(f"""
                 SELECT 연월라벨, 나이, 성별, COUNT(*) AS 건수
                 FROM df
-                WHERE {where} AND 나이!='법인및사업자'
+                WHERE {where}
                 GROUP BY 연월번호, 연월라벨, 나이, 성별
                 ORDER BY 연월번호
             """).df()
@@ -166,7 +166,7 @@ with f3:
                 columns=["나이", "성별"],
                 values="건수",
                 fill_value=0
-            ).to_excel(w, sheet_name="월별_연령성별_분포")
+            ).to_excel(w, sheet_name="연령성별_분포")
 
             # 3️⃣ 월별 주행거리 범위
             mileage_m = con.execute(f"""
@@ -181,7 +181,7 @@ with f3:
                 index="연월라벨",
                 columns="주행거리_범위",
                 values="건수"
-            ).fillna(0).to_excel(w, sheet_name="월별_주행거리_범위")
+            ).fillna(0).to_excel(w, sheet_name="주행거리_분포")
 
             # 4️⃣ 월별 취득금액 범위
             price_m = con.execute(f"""
@@ -196,7 +196,7 @@ with f3:
                 index="연월라벨",
                 columns="취득금액_범위",
                 values="건수"
-            ).fillna(0).to_excel(w, sheet_name="월별_취득금액_범위")
+            ).fillna(0).to_excel(w, sheet_name="취득금액_분포")
 
             # 5️⃣ 월별 시/도 분포
             sido_m = con.execute(f"""
@@ -211,7 +211,7 @@ with f3:
                 index="연월라벨",   # 세로: 월
                 columns="시도",     # 가로: 시/도
                 values="건수"
-            ).fillna(0).to_excel(w, sheet_name="월별_시도별_분포")
+            ).fillna(0).to_excel(w, sheet_name="지역별_분포")
             
         with open(path, "rb") as f:
             st.download_button(
@@ -237,7 +237,7 @@ for t in g1["이전등록유형"].unique():
     d = g1[g1["이전등록유형"]==t]
     fig1.add_scatter(x=d["연월라벨"], y=d["건수"], mode="lines+markers", name=str(t))
 
-fig1.update_layout(xaxis=dict(ticks=""), yaxis=dict(ticks=""))
+fig1.update_layout(xaxis=dict(ticks=""), yaxis=dict(ticks="", tickformat=","))
 st.markdown("<div class='graph-box'><div class='graph-header'><h3>월별 이전등록유형 추이</h3></div></div>", unsafe_allow_html=True)
 st.plotly_chart(fig1, use_container_width=True)
 
@@ -265,7 +265,7 @@ if not df_ap_m.empty:
         textposition="top center", textfont=dict(size=10, color="red", family="Arial Black"), 
         name="AP 비중 (%)", line=dict(color='red', width=1.5)
     )
-    fig_ap.update_layout(xaxis=dict(ticks=""), yaxis=dict(ticks=""))
+    fig_ap.update_layout(xaxis=dict(ticks=""), yaxis=dict(ticks="", tickformat=","))
     fig_ap.update_yaxes(range=[0, ap_max * 2.0])
     st.markdown("<div class='graph-box'><div class='graph-header'><h3>AP 월별 추이 (유효시장 대비)</h3></div></div>", unsafe_allow_html=True)
     st.plotly_chart(fig_ap, use_container_width=True)
@@ -281,7 +281,7 @@ c_age, c_gender = st.columns([4, 2])
 with c_age:
     fig_age = px.bar(age_data, x="건수", y="나이", orientation="h", text_auto=',.0f')
     fig_age.update_traces(texttemplate='<b>%{text}</b>', textposition='outside', textfont=dict(size=18, color="black"))
-    fig_age.update_layout(xaxis=dict(ticks=""), yaxis=dict(ticks=""))
+    fig_age.update_layout(xaxis=dict(ticks=""), yaxis=dict(ticks="", tickformat=","))
     st.plotly_chart(fig_age, use_container_width=True)
 
 with c_gender:
@@ -291,6 +291,6 @@ with c_gender:
 
 age_line = con.execute(f"SELECT 연월라벨, 나이, COUNT(*) AS 건수 FROM df WHERE {where} AND 나이!='법인및사업자' GROUP BY 연월번호, 연월라벨, 나이 ORDER BY 연월번호").df()
 fig_age_line = px.line(age_line, x="연월라벨", y="건수", color="나이", markers=True)
-fig_age_line.update_layout(xaxis=dict(ticks=""), yaxis=dict(ticks=""))
+fig_age_line.update_layout(xaxis=dict(ticks=""), yaxis=dict(ticks="", tickformat=","))
 st.markdown("<div class='graph-box'><div class='graph-header'><h3>월별 연령대별 추이</h3></div></div>", unsafe_allow_html=True)
 st.plotly_chart(fig_age_line, use_container_width=True)
