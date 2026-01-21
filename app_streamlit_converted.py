@@ -79,7 +79,28 @@ else:
 def get_count(p_sql):
     return con.execute(p_sql).fetchone()[0]
 
-cur_cnt = get_count(f"SELECT COUNT(*) FROM df WHERE 연월번호={cur_period}")
+if cur_period is None:
+    cur_cnt = prev_cnt = yoy_cnt = 0
+    used_cur = used_prev = 0
+    mom = yoy = ratio_cur = ratio_mom = 0
+else:
+    cur_cnt = get_count(f"SELECT COUNT(*) FROM df WHERE 연월번호={cur_period}")
+
+    prev_period = (cur_year*100+cur_month-1) if cur_month>1 else ((cur_year-1)*100+12)
+    prev_cnt = get_count(f"SELECT COUNT(*) FROM df WHERE 연월번호={prev_period}")
+
+    yoy_period = (cur_year-1)*100+cur_month
+    yoy_cnt = get_count(f"SELECT COUNT(*) FROM df WHERE 연월번호={yoy_period}")
+
+    used_cur = get_count(f"SELECT COUNT(*) FROM df WHERE 연월번호={cur_period} AND 중고차시장=1")
+    used_prev = get_count(f"SELECT COUNT(*) FROM df WHERE 연월번호={prev_period} AND 중고차시장=1")
+
+    ratio_cur = used_cur/cur_cnt*100 if cur_cnt else 0
+    ratio_prev = used_prev/prev_cnt*100 if prev_cnt else 0
+
+    mom = (cur_cnt-prev_cnt)/prev_cnt*100 if prev_cnt else 0
+    yoy = (cur_cnt-yoy_cnt)/yoy_cnt*100 if yoy_cnt else 0
+    ratio_mom = ratio_cur - ratio_prev
 prev_period = (cur_year*100+cur_month-1) if cur_month>1 else ((cur_year-1)*100+12)
 prev_cnt = get_count(f"SELECT COUNT(*) FROM df WHERE 연월번호={prev_period}")
 
