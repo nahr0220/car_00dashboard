@@ -115,7 +115,7 @@ if st.button("📥 엑셀 생성 및 다운로드", key="excel_download"):
                 price_m.pivot(index="연월라벨", columns="취득금액_범위", values="건수").fillna(0).to_excel(w, sheet_name="취득금액_분포") 
                 sido_m = con.execute(f"SELECT 연월라벨, \"시/도\" AS 시도, COUNT(*) AS 건수 FROM df WHERE {where} GROUP BY 연월번호, 연월라벨, \"시/도\" ORDER BY 연월번호").df() 
                 sido_m.pivot(index="연월라벨", columns="시도", values="건수").fillna(0).to_excel(w, sheet_name="지역별_분포") 
-            with open(path, "rb") as f: st.download_button("✅ 다운로드", f, file_name=f"이전등록_{period_to_label.get(start_p, 'N/A')}.xlsx") 
+            with open(path, "rb") as f: st.download_button("✅ 다운로드", f, file_name=f"이전등록_{period_to_label.get(start_p, 'N/A')}_{period_to_label.get(end_p, 'N/A')}.xlsx") 
     except Exception as e: st.error(f"❌ 엑셀 생성 실패: {e}") 
 st.markdown("</div>", unsafe_allow_html=True) 
 
@@ -154,7 +154,7 @@ if not df_ap_m.empty:
 st.markdown("<div class='graph-box'><div class='graph-header'><h3>연령·성별 현황</h3></div></div>", unsafe_allow_html=True) 
 age_data = con.execute(f"SELECT 나이, COUNT(*) AS 건수 FROM df WHERE {where} AND 나이!='법인및사업자' GROUP BY 나이 ORDER BY 나이").df() 
 gender_data = con.execute(f"SELECT 성별, COUNT(*) AS 건수 FROM df WHERE {where} AND 나이!='법인및사업자' GROUP BY 성별").df() 
-if not age_data.empty:
+if not age_data.empty: 
     c_age, c_gender = st.columns([4, 2]) 
     with c_age: 
         fig_age = px.bar(age_data, x="건수", y="나이", orientation="h") 
@@ -167,7 +167,7 @@ if not age_data.empty:
 
 # --------------------------------------------------------------- # Graph 5: 월별 연령대별 추이 # --------------------------------------------------------------- 
 age_line = con.execute(f"SELECT 연월라벨, 나이, COUNT(*) AS 건수 FROM df WHERE {where} AND 나이!='법인및사업자' GROUP BY 연월번호, 연월라벨, 나이 ORDER BY 연월번호").df() 
-if not age_line.empty:
+if not age_line.empty: 
     st.markdown("<div class='graph-box'><div class='graph-header'><h3>월별 연령대별 추이</h3></div></div>", unsafe_allow_html=True) 
     fig_age_line = px.line(age_line, x="연월라벨", y="건수", color="나이", markers=True) 
     fig_age_line.update_layout(xaxis=dict(ticks=""), yaxis=dict(ticks="", tickformat=",")) 
