@@ -244,29 +244,54 @@ st.plotly_chart(fig1, use_container_width=True)
 # ---------------------------------------------------------------
 # Graph 2: AP 월별 추이
 # ---------------------------------------------------------------
-valid_m = con.execute(f"SELECT 연월번호, 연월라벨, COUNT(*) AS 유효시장건수 FROM df WHERE 유효시장=1 GROUP BY 연월번호, 연월라벨").df()
-df_ap_m = pd.merge(df_ap, valid_m, on=["연월번호","연월라벨"], how="inner")
+valid_m = con.execute(f"""
+    SELECT 연월번호, 연월라벨, COUNT(*) AS 유효시장건수 
+    FROM df 
+    WHERE {where} AND 유효시장=1 
+    GROUP BY 연월번호, 연월라벨
+""").df()
+
+# 2. AP 데이터(df_ap)도 선택된 연월 범위(start_p ~ end_p)로 필터링
+df_ap_filtered = df_ap[(df_ap["연월번호"] >= start_p) & (df_ap["연월번호"] <= end_p)]
+
+# 3. 필터링된 두 데이터를 병합
+df_ap_m = pd.merge(df_ap_filtered, valid_m, on=["연월번호","연월라벨"], how="inner")
 
 if not df_ap_m.empty:
     df_ap_m["AP비중"] = df_ap_m["AP"]/df_ap_m["유효시장건수"]*100
     ap_max = df_ap_m["AP"].max() if not df_ap_m["AP"].empty else 1
     ratio_max = df_ap_m["AP비중"].max() if not df_ap_m["AP비중"].empty else 1
+    
+    # 비중 시각화를 위한 스케일 조정 (데이터에 따라 1.6 등의 계수는 조절 가능)
     df_ap_m["AP비중_시각화"] = (df_ap_m["AP비중"]/ratio_max) * ap_max * 1.6
 
     fig_ap = go.Figure()
+    
+    # 바 차트: AP 판매량
     fig_ap.add_bar(
         x=df_ap_m["연월라벨"], y=df_ap_m["AP"], name="AP 판매량", 
         text=df_ap_m["AP"], textposition='outside',
         texttemplate='<b>%{text:,}</b>', textfont=dict(size=15, color="black")
     )
+    
+    # 라인 차트: AP 비중
     fig_ap.add_scatter(
         x=df_ap_m["연월라벨"], y=df_ap_m["AP비중_시각화"], 
-        mode="lines+markers+text", text=df_ap_m["AP비중"].round(2).astype(str) + "%",
-        textposition="top center", textfont=dict(size=10, color="red", family="Arial Black"), 
-        name="AP 비중 (%)", line=dict(color='red', width=1.5)
+        mode="lines+markers+text", 
+        text=df_ap_m["AP비중"].round(2).astype(str) + "%",
+        textposition="top center", 
+        textfont=dict(size=10, color="red", family="Arial Black"), 
+        name="AP 비중 (%)", 
+        line=dict(color='red', width=1.5)
     )
-    fig_ap.update_layout(xaxis=dict(ticks=""), yaxis=dict(ticks="", tickformat=","))
+    
+    fig_ap.update_layout(
+        xaxis=dict(ticks="", title="연월"), 
+        yaxis=dict(ticks="", tickformat=",", title="판매량"),
+        margin=dict(t=50, b=50, l=50, r=50)
+    )
     fig_ap.update_yaxes(range=[0, ap_max * 2.0])
+    
     st.markdown("<div class='graph-box'><div class='graph-header'><h3>AP 월별 추이 (유효시장 대비)</h3></div></div>", unsafe_allow_html=True)
     st.plotly_chart(fig_ap, use_container_width=True)
 
