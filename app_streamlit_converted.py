@@ -113,15 +113,17 @@ mom, yoy, ratio_cur, ratio_mom = kpi_data['mom'], kpi_data['yoy'], kpi_data['rat
 # ---------------------------------------------------------------
 # KPI 대시보드
 # ---------------------------------------------------------------
-st.markdown("## 자동차 이전등록 대시보드")
+st.markdown("<h1 style='font-size:36px;'>자동차 이전등록 대시보드</h1>", unsafe_allow_html=True)
+st.write("")
+c1, c2, c3 = st.columns(3)
 
 c1,c2,c3 = st.columns(3)
 with c1:
-    st.markdown(f"<div class='kpi-box'><h4>{cur_year}년 누적 거래량</h4><h2>{cur_cnt:,}</h2></div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='kpi-box'><h4>{cur_year}년 누적 거래량</h4><h2>{cur_cnt:,}건</h2></div>", unsafe_allow_html=True)
 with c2:
     mom_c = "red" if mom>0 else "blue"
     yoy_c = "red" if yoy>0 else "blue"
-    st.markdown(f"<div class='kpi-box'><h4>{cur_month}월 거래량</h4><h2>{cur_cnt:,}</h2><div><span style='color:{mom_c}'>{mom:+.1f}% MoM</span> | <span style='color:{yoy_c}'>{yoy:+.1f}% YoY</span></div></div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='kpi-box'><h4>{cur_month}월 거래량</h4><h2>{cur_cnt:,}건</h2><div><span style='color:{mom_c}'>{mom:+.1f}% MoM</span> | <span style='color:{yoy_c}'>{yoy:+.1f}% YoY</span></div></div>", unsafe_allow_html=True)
 with c3:
     r_mom_c = "red" if ratio_mom>0 else "blue"
     st.markdown(f"<div class='kpi-box'><h4>중고차 비중</h4><h2>{ratio_cur:.1f}%</h2><div><span style='color:{r_mom_c}'>{ratio_mom:+.1f}%p MoM</span></div></div>", unsafe_allow_html=True)
@@ -140,10 +142,10 @@ if start_p > end_p:
     start_p, end_p = end_p, start_p
 where = f"연월번호 BETWEEN {start_p} AND {end_p}"
 
-market_help_msg = """**각 시장의 정의:**
+market_help_msg = """**출처: 국토교통부 자료**
 - **전체**: 국토교통부의 자동차 이전 데이터 전체
-- **중고차시장**: 중고차 전체 등록대수 중 개인 간 거래대수를 포함한 사업자 거래대수 (개인거래 + 매도 + 상사이전 + 알선)
-- **유효시장**: 중고차 전체 등록대수 중 개인 간 거래대수를 제외한 사업자 거래대수 (매도 + 상사이전 + 알선)
+- **중고차시장**: 이전 데이터 전체 중 개인 간 거래대수를 포함한 사업자 거래대수 (개인거래 + 매도 + 상사이전 + 알선)
+- **유효시장**: 이전 데이터 전체 중 개인 간 거래대수를 제외한 사업자 거래대수 (매도 + 상사이전 + 알선)
 - **마케팅**: 마케팅팀이 사전에 정의한 필터링 기준에 따라, 이전등록구분명이 '매매업자거래이전'이며 등록상세명이 '일반소유용'인 이전 등록 건"""
 
 market_type = st.radio("시장 구분 선택", ["전체","중고차시장","유효시장","마케팅"], horizontal=True, help=market_help_msg)
@@ -229,9 +231,23 @@ g1 = con.execute(f"SELECT 연월라벨, 이전등록유형, COUNT(*) AS 건수 F
 g_total = g1.groupby("연월라벨")["건수"].sum().reset_index()
 
 fig1 = go.Figure()
-fig1.add_bar(x=g_total["연월라벨"], y=g_total["건수"], name="전체", opacity=0.3, 
-             text=g_total["건수"], textposition='outside', texttemplate='<b>%{text:,}</b>', 
-             textfont=dict(size=30, color="black"))
+fig1.add_bar(
+    x=g_total["연월라벨"],
+    y=g_total["건수"],
+    name="전체",
+    opacity=0.25,
+    marker_color="#5B9BD5"
+)
+
+fig1.add_scatter(
+    x=g_total["연월라벨"],
+    y=g_total["건수"] * 1.05,
+    mode="text",
+    text=g_total["건수"],
+    texttemplate="<b>%{text:,}</b>",
+    textfont=dict(size=10, color="#888888"),
+    showlegend=False
+)
 for t in g1["이전등록유형"].unique():
     d = g1[g1["이전등록유형"]==t]
     fig1.add_scatter(x=d["연월라벨"], y=d["건수"], mode="lines+markers", name=str(t))
@@ -258,16 +274,16 @@ if not df_ap_m.empty:
     fig_ap = go.Figure()
     fig_ap.add_bar(x=df_ap_m["연월라벨"], y=df_ap_m["AP"], name="AP 판매량",
                    text=df_ap_m["AP"], textposition='outside', texttemplate='<b>%{text:,}</b>',
-                   textfont=dict(size=15, color="black"))
+                   textfont=dict(size=13, color="black"))
     fig_ap.add_scatter(x=df_ap_m["연월라벨"], y=df_ap_m["AP비중_시각화"], 
                       mode="lines+markers+text", text=df_ap_m["AP비중"].round(2).astype(str) + "%",
-                      textposition="top center", textfont=dict(size=10, color="red", family="Arial Black"),
-                      name="AP 비중 (%)", line=dict(color='red', width=1.5))
-    fig_ap.update_layout(xaxis=dict(ticks="", title="연월"), yaxis=dict(ticks="", tickformat=",", title="판매량"),
+                      textposition="top center", textfont=dict(size=10, color="#9E2A2B", family="Arial Black"),
+                      name="AP 비중 (%)", line=dict(color='red', width=1.3))
+    fig_ap.update_layout(xaxis=dict(ticks="", title="연월"), yaxis=dict(ticks="", tickformat=",", title="판매량", dtick=1000),
                         margin=dict(t=50, b=50, l=50, r=50))
     fig_ap.update_yaxes(range=[0, ap_max * 2.0])
     
-    st.markdown("<div class='graph-box'><div class='graph-header'><h3>AP 월별 추이 (유효시장 대비)</h3></div></div>", unsafe_allow_html=True)
+    st.markdown("<div class='graph-box'><div class='graph-header'><h3>AP 판매 추이 및 유효시장 점유율</h3></div></div>", unsafe_allow_html=True)
     st.plotly_chart(fig_ap, use_container_width=True)
 
 # Graph 3 & 4: 연령·성별
