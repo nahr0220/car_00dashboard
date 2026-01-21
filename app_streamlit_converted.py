@@ -69,8 +69,12 @@ period_to_label = dict(zip(periods["연월번호"], periods["연월라벨"]))
 # ---------------------------------------------------------------
 # KPI: 중고차 비중 MoM 추가 계산
 # ---------------------------------------------------------------
-cur_period = int(periods["연월번호"].max())
-cur_year, cur_month = divmod(cur_period,100)
+if periods.empty:
+    cur_period = None
+    cur_year = cur_month = None
+else:
+    cur_period = int(periods["연월번호"].dropna().max())
+    cur_year, cur_month = divmod(cur_period,100)
 
 def get_count(p_sql):
     return con.execute(p_sql).fetchone()[0]
