@@ -101,7 +101,11 @@ else:
     mom = (cur_cnt-prev_cnt)/prev_cnt*100 if prev_cnt else 0
     yoy = (cur_cnt-yoy_cnt)/yoy_cnt*100 if yoy_cnt else 0
     ratio_mom = ratio_cur - ratio_prev
-prev_period = (cur_year*100+cur_month-1) if cur_month>1 else ((cur_year-1)*100+12)
+if cur_year is not None and cur_month is not None:
+    prev_period = (cur_year*100+cur_month-1) if cur_month > 1 else ((cur_year-1)*100 + 12)
+    yoy_period = (cur_year-1)*100 + cur_month
+else:
+    prev_period = yoy_period = None
 prev_cnt = get_count(f"SELECT COUNT(*) FROM df WHERE 연월번호={prev_period}")
 
 yoy_period = (cur_year-1)*100+cur_month
