@@ -161,12 +161,13 @@ with f3:
                 ORDER BY 연월번호
             """).df()
 
+            age_gender_m.loc[age_gender_m['나이'] == '법인및사업자', '성별'] = '법인및사업자'
+
             age_gender_m.pivot_table(
                 index="연월라벨",
                 columns=["나이", "성별"],
                 values="건수",
                 fill_value=0,
-                dropna = False
             ).to_excel(w, sheet_name="연령성별_분포")
 
             # 3️⃣ 월별 주행거리 범위
