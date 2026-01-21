@@ -165,7 +165,8 @@ with f3:
                 index="연월라벨",
                 columns=["나이", "성별"],
                 values="건수",
-                fill_value=0
+                fill_value=0,
+                dropna = False
             ).to_excel(w, sheet_name="연령성별_분포")
 
             # 3️⃣ 월별 주행거리 범위
