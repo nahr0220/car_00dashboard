@@ -69,11 +69,14 @@ period_to_label = dict(zip(periods["연월번호"], periods["연월라벨"]))
 # ---------------------------------------------------------------
 # KPI: 중고차 비중 MoM 추가 계산
 # ---------------------------------------------------------------
-if periods.empty:
-    st.warning("데이터가 없습니다.")
-    st.stop()  # 데이터 없으면 여기서 멈춰서 에러를 안 냄
-
-cur_period = int(periods["연월번호"].max())
+# 초기값 설정
+cur_period = 0
+if not periods.empty:
+    cur_period = int(periods["연월번호"].max())
+    period_to_label = dict(zip(periods["연월번호"], periods["연월라벨"]))
+else:
+    st.info("데이터를 불러오는 중입니다...")
+    st.stop() # 초기 로딩시에만 멈춤
 cur_year, cur_month = divmod(cur_period,100)
 
 def get_count(p_sql):
