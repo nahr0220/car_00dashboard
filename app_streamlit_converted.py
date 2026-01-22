@@ -1,5 +1,5 @@
 # =============================================================== 
-# 자동차 이전등록 대시보드 [텍스트 완벽 복구 + 속도 최적화 버전]
+# 자동차 이전등록 대시보드 [최종 완결판 - 성능 최적화 및 원문 텍스트 전체 반영]
 # =============================================================== 
 import duckdb 
 import pandas as pd 
@@ -12,9 +12,15 @@ import os
 
 # 1. 페이지 설정 및 디자인
 st.set_page_config(page_title="자동차 이전등록 대시보드", layout="wide") 
-st.markdown(""" <style> .stApp { max-width:1200px; margin:0 auto; padding:20px 40px; background:#fff; } .kpi-box { background:#F8F8F8; padding:22px; border-radius:10px; text-align:center; height:150px; display:flex; flex-direction:column; justify-content:center; } .filter-box,.graph-box { background:#EDF4FF; border-radius:12px; margin-bottom:20px; } .graph-header { background:#E3F2FD; padding:16px; border-radius:10px; } h3 { margin:0; font-weight:800; color:#1E1E1E; border:none; } </style> """, unsafe_allow_html=True) 
+st.markdown(""" <style> 
+    .stApp { max-width:1200px; margin:0 auto; padding:20px 40px; background:#fff; } 
+    .kpi-box { background:#F8F8F8; padding:22px; border-radius:10px; text-align:center; height:150px; display:flex; flex-direction:column; justify-content:center; } 
+    .filter-box,.graph-box { background:#EDF4FF; border-radius:12px; margin-bottom:20px; } 
+    .graph-header { background:#E3F2FD; padding:16px; border-radius:10px; } 
+    h3 { margin:0; font-weight:800; color:#1E1E1E; border:none; } 
+</style> """, unsafe_allow_html=True) 
 
-# 2. 데이터 로드 (속도 최적화를 위한 캐싱)
+# 2. 데이터 로드 및 인덱싱 (속도 저하의 근본 원인 해결)
 @st.cache_resource 
 def get_con(): 
     try: 
@@ -23,8 +29,17 @@ def get_con():
         base_path = Path(__file__).parent.absolute() / "data" 
         files = sorted(base_path.glob("output_*분기.csv")) 
         if not files: return None 
+        
         file_list_sql = "[" + ",".join(f"'{str(f.as_posix())}'" for f in files) + "]" 
-        con.execute(f"CREATE VIEW df AS SELECT *, 년도*100+월 AS 연월번호, CAST(년도 AS VARCHAR)||'-'||LPAD(CAST(월 AS VARCHAR),2,'0') AS 연월라벨 FROM read_csv_auto({file_list_sql})") 
+        
+        # [핵심 최적화] VIEW 대신 TABLE을 생성하고 인덱스를 부여하여 검색 속도 비약적 향상
+        con.execute(f"""
+            CREATE TABLE raw_data AS 
+            SELECT *, 년도*100+월 AS 연월번호, 
+            CAST(년도 AS VARCHAR)||'-'||LPAD(CAST(월 AS VARCHAR),2,'0') AS 연월라벨 
+            FROM read_csv_auto({file_list_sql})
+        """)
+        con.execute("CREATE INDEX idx_period_market ON raw_data (연월번호, 중고차시장, 유효시장, 마케팅)")
         return con 
     except: return None 
 
@@ -32,7 +47,7 @@ con = get_con()
 
 # AP 데이터 로드
 @st.cache_data
-def load_ap():
+def load_ap_data():
     try: 
         df_ap = pd.read_excel("data/AP Sales Summary.xlsx", skiprows=1) 
         df_ap.columns = ["년도","월","AP"] 
@@ -43,29 +58,29 @@ def load_ap():
     except: 
         return pd.DataFrame(columns=["연월번호", "연월라벨", "AP"]) 
 
-df_ap = load_ap()
+df_ap = load_ap_data()
 
 if con is None: 
     st.error("❌ 'data' 폴더에 CSV 파일이 없습니다.")
     st.stop()
 
 # 3. 필터 데이터 추출
-periods_df = con.execute('SELECT DISTINCT 연월번호, 연월라벨 FROM df ORDER BY 연월번호').df() 
-if periods_df.empty: st.stop()
+periods_df = con.execute('SELECT DISTINCT 연월번호, 연월라벨 FROM raw_data ORDER BY 연월번호').df() 
 period_list = periods_df["연월번호"].tolist()
 period_labels = dict(zip(periods_df["연월번호"], periods_df["연월라벨"])) 
 
 st.markdown("<h1 style='font-size:36px;'>자동차 이전등록 대시보드</h1>", unsafe_allow_html=True) 
 st.markdown('<div class="filter-box">', unsafe_allow_html=True) 
 f1, f2, f3 = st.columns([1, 1, 0.6]) 
+
 with f1: start_p = st.selectbox("시작 연월", period_list, format_func=lambda x: period_labels.get(x)) 
 with f2: end_p = st.selectbox("종료 연월", period_list, index=len(period_list)-1, format_func=lambda x: period_labels.get(x)) 
 
 if start_p > end_p:
-    st.error("⚠️ 시작 연월이 종료 연월보다 큽니다.")
+    st.error("⚠️ 시작 연월이 종료 연월보다 큽니다. 기간을 다시 선택하세요.")
     st.stop()
 
-# [원문 유지] 시장 구분 도움말
+# [원문 텍스트 반영] 시장 구분 도움말
 market_help_msg = """**출처: 국토교통부 자료** - **전체**: 국토교통부의 자동차 이전 데이터 전체 
 - **중고차시장**: 이전 데이터 전체 중 개인 간 거래대수를 포함한 사업자 거래대수 (개인거래 + 매도 + 상사이전 + 알선) 
 - **유효시장**: 이전 데이터 전체 중 개인 간 거래대수를 제외한 사업자 거래대수 (매도 + 상사이전 + 알선) 
@@ -74,23 +89,24 @@ market_help_msg = """**출처: 국토교통부 자료** - **전체**: 국토교�
 market_type = st.radio("시장 구분 선택", ["전체","중고차시장","유효시장","마케팅"], horizontal=True, help=market_help_msg) 
 st.markdown("</div>", unsafe_allow_html=True) 
 
-# 4. KPI 계산 (최적화 쿼리)
+# 4. KPI 계산 최적화 (한 번의 쿼리로 병합)
 where = f"연월번호 BETWEEN {start_p} AND {end_p}" 
 if market_type != "전체": where += f" AND {market_type}=1" 
 
-@st.cache_data
-def get_kpi_metrics(_where, _end_p, _market_type):
-    t_cnt = con.execute(f"SELECT COUNT(*) FROM df WHERE {_where}").fetchone()[0] or 0
-    
-    e_where = f"연월번호 = {_end_p}"
-    if _market_type != "전체": e_where += f" AND {_market_type}=1"
-    e_val = con.execute(f"SELECT COUNT(*) FROM df WHERE {e_where}").fetchone()[0] or 0
-    
-    u_cnt = con.execute(f"SELECT COUNT(*) FROM df WHERE {_where} AND 중고차시장=1").fetchone()[0] or 0
-    ratio = (u_cnt / t_cnt * 100) if t_cnt > 0 else 0
-    return t_cnt, e_val, ratio
+@st.cache_data(ttl=3600)
+def get_kpi_data(_where, _end_p, _market_type):
+    # 전체 건수와 중고차시장 건수, 종료월 건수를 통합 조회
+    kpi_res = con.execute(f"""
+        SELECT 
+            COUNT(*) as total,
+            COUNT(CASE WHEN 중고차시장=1 THEN 1 END) as used_cnt,
+            COUNT(CASE WHEN 연월번호={_end_p} THEN 1 END) as end_val
+        FROM raw_data WHERE {_where}
+    """).fetchone()
+    return kpi_res
 
-total_cnt, end_val, ratio_avg = get_kpi_metrics(where, end_p, market_type)
+total_cnt, used_cnt_total, end_val = get_kpi_data(where, end_p, market_type)
+ratio_avg = (used_cnt_total / total_cnt * 100) if total_cnt > 0 else 0
 end_label = period_labels.get(end_p)
 
 c1, c2, c3 = st.columns(3) 
@@ -104,20 +120,22 @@ if st.button("📥 엑셀 생성 및 다운로드"):
         with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp: 
             path = tmp.name 
             with pd.ExcelWriter(path, engine="xlsxwriter") as w: 
-                con.execute(f"SELECT 연월라벨, 이전등록유형, COUNT(*) AS 건수 FROM df WHERE {where} GROUP BY 연월번호, 연월라벨, 이전등록유형 ORDER BY 연월번호").df().pivot(index="연월라벨", columns="이전등록유형", values="건수").fillna(0).to_excel(w, sheet_name="월별_이전등록유형_건수") 
-                age_gender_m = con.execute(f"SELECT 연월라벨, 나이, 성별, COUNT(*) AS 건수 FROM df WHERE {where} GROUP BY 연월번호, 연월라벨, 나이, 성별 ORDER BY 연월번호").df() 
+                # 각 시트 생성
+                con.execute(f"SELECT 연월라벨, 이전등록유형, COUNT(*) AS 건수 FROM raw_data WHERE {where} GROUP BY 연월번호, 연월라벨, 이전등록유형 ORDER BY 연월번호").df().pivot(index="연월라벨", columns="이전등록유형", values="건수").fillna(0).to_excel(w, sheet_name="월별_이전등록유형_건수") 
+                age_gender_m = con.execute(f"SELECT 연월라벨, 나이, 성별, COUNT(*) AS 건수 FROM raw_data WHERE {where} GROUP BY 연월번호, 연월라벨, 나이, 성별 ORDER BY 연월번호").df() 
                 age_gender_m.loc[age_gender_m['나이'] == '법인및사업자', '성별'] = '법인및사업자' 
                 age_gender_m.pivot_table(index="연월라벨", columns=["나이", "성별"], values="건수", fill_value=0).to_excel(w, sheet_name="연령성별_분포") 
-                con.execute(f"SELECT 연월라벨, 주행거리_범위, COUNT(*) AS 건수 FROM df WHERE {where} GROUP BY 연월번호, 연월라벨, 주행거리_범위 ORDER BY 연월번호").df().pivot(index="연월라벨", columns="주행거리_범위", values="건수").fillna(0).to_excel(w, sheet_name="주행거리_분포") 
-                con.execute(f"SELECT 연월라벨, 취득금액_범위, COUNT(*) AS 건수 FROM df WHERE {where} GROUP BY 연월번호, 연월라벨, 취득금액_범위 ORDER BY 연월번호").df().pivot(index="연월라벨", columns="취득금액_범위", values="건수").fillna(0).to_excel(w, sheet_name="취득금액_분포") 
-                con.execute(f"SELECT 연월라벨, \"시/도\" AS 시도, COUNT(*) AS 건수 FROM df WHERE {where} GROUP BY 연월번호, 연월라벨, \"시/도\" ORDER BY 연월번호").df().pivot(index="연월라벨", columns="시도", values="건수").fillna(0).to_excel(w, sheet_name="지역별_분포") 
+                con.execute(f"SELECT 연월라벨, 주행거리_범위, COUNT(*) AS 건수 FROM raw_data WHERE {where} GROUP BY 연월번호, 연월라벨, 주행거리_범위 ORDER BY 연월번호").df().pivot(index="연월라벨", columns="주행거리_범위", values="건수").fillna(0).to_excel(w, sheet_name="주행거리_분포") 
+                con.execute(f"SELECT 연월라벨, 취득금액_범위, COUNT(*) AS 건수 FROM raw_data WHERE {where} GROUP BY 연월번호, 연월라벨, 취득금액_범위 ORDER BY 연월번호").df().pivot(index="연월라벨", columns="취득금액_범위", values="건수").fillna(0).to_excel(w, sheet_name="취득금액_분포") 
+                con.execute(f"SELECT 연월라벨, \"시/도\" AS 시도, COUNT(*) AS 건수 FROM raw_data WHERE {where} GROUP BY 연월번호, 연월라벨, \"시/도\" ORDER BY 연월번호").df().pivot(index="연월라벨", columns="시도", values="건수").fillna(0).to_excel(w, sheet_name="지역별_분포") 
+            
             with open(path, "rb") as f: 
-                file_name = f"이전등록_{period_labels.get(start_p)}_{period_labels.get(end_p)}_{market_type}.xlsx"
-                st.download_button("✅ 다운로드 클릭", f, file_name=file_name) 
+                f_name = f"이전등록_{period_labels.get(start_p)}_{period_labels.get(end_p)}_{market_type}.xlsx"
+                st.download_button("✅ 다운로드 클릭", f, file_name=f_name) 
     except Exception as e: st.error(f"엑셀 생성 실패: {e}") 
 
-# 6. 시각화 (그래프)
-# [원문 유지] 이전등록유형 툴팁
+# 6. 시각화
+# [원문 텍스트 반영] 이전등록유형 상세 정의
 tooltip_text = """**중고차 거래(이전등록) 유형**
 - 1. 매입 : 자동차매매업자가 상품용으로 구매하여 중고차 거래로 등록한 차량
 - 2. 매도 : 자동차매매업자가 자동차 매매업자를 제외한 타인에게 판매하여 중고차 거래로 등록한 차량
@@ -126,16 +144,9 @@ tooltip_text = """**중고차 거래(이전등록) 유형**
 - 5. 개인거래 : 자동차매매업자와 무관하게 당사자간 거래로 등록한 차량
 - 6. 기타 : 위 유형 외에 상속, 증여, 촉탁 등으로 중고차 거래로 등록한 차량"""
 
-st.markdown(f""" 
-<div class='graph-box'>
-    <div class='graph-header' style='display:flex; justify-content:space-between; align-items:center;'>
-        <h3>월별 이전등록유형 추이</h3>
-        <div title='{tooltip_text}' style='cursor:help; width:22px; height:22px; background:#5B9BD5; color:white; border-radius:50%; text-align:center; line-height:22px; font-weight:bold;'>?</div>
-    </div>
-</div> 
-""", unsafe_allow_html=True)
+st.markdown(f""" <div class='graph-box'><div class='graph-header' style='display:flex; justify-content:space-between; align-items:center;'><h3>월별 이전등록유형 추이</h3><div title='{tooltip_text}' style='cursor:help; width:22px; height:22px; background:#5B9BD5; color:white; border-radius:50%; text-align:center; line-height:22px; font-weight:bold;'>?</div></div></div> """, unsafe_allow_html=True)
 
-g1 = con.execute(f"SELECT 연월라벨, 이전등록유형, COUNT(*) AS 건수 FROM df WHERE {where} GROUP BY 연월번호, 연월라벨, 이전등록유형 ORDER BY 연월번호").df() 
+g1 = con.execute(f"SELECT 연월라벨, 이전등록유형, COUNT(*) AS 건수 FROM raw_data WHERE {where} GROUP BY 연월번호, 연월라벨, 이전등록유형 ORDER BY 연월번호").df() 
 if not g1.empty:
     g_total = g1.groupby("연월라벨")["건수"].sum().reset_index() 
     fig1 = go.Figure() 
@@ -147,10 +158,9 @@ if not g1.empty:
     fig1.update_layout(yaxis=dict(tickformat=","), margin=dict(t=20)) 
     st.plotly_chart(fig1, use_container_width=True)
 
-# 이하 그래프 [2]~[4]는 기존 로직을 따르되, 위에서 정의한 최적화된 where 절을 사용합니다.
-# AP 추이
+# [2] AP 추이
 st.markdown("<div class='graph-box'><div class='graph-header'><h3>AP 판매 추이 및 유효시장 점유율</h3></div></div>", unsafe_allow_html=True) 
-valid_m = con.execute(f"SELECT 연월번호, 연월라벨, COUNT(*) AS 유효시장건수 FROM df WHERE {where} AND 유효시장=1 GROUP BY 연월번호, 연월라벨").df() 
+valid_m = con.execute(f"SELECT 연월번호, 연월라벨, COUNT(*) AS 유효시장건수 FROM raw_data WHERE {where} AND 유효시장=1 GROUP BY 연월번호, 연월라벨").df() 
 df_ap_m = pd.merge(df_ap[(df_ap["연월번호"]>=start_p)&(df_ap["연월번호"]<=end_p)], valid_m, on=["연월번호","연월라벨"], how="inner") 
 if not df_ap_m.empty: 
     df_ap_m["AP비중"] = df_ap_m["AP"]/df_ap_m["유효시장건수"]*100 
@@ -163,16 +173,17 @@ if not df_ap_m.empty:
     fig_ap.update_layout(yaxis=dict(tickformat=",", dtick=1000), margin=dict(t=50, b=50)) 
     st.plotly_chart(fig_ap, use_container_width=True) 
 
-# 연령성별 및 연령대 추이
+# [3] 연령성별
 st.markdown("<div class='graph-box'><div class='graph-header'><h3>연령·성별 현황</h3></div></div>", unsafe_allow_html=True) 
-age_data = con.execute(f"SELECT 나이, COUNT(*) AS 건수 FROM df WHERE {where} AND 나이!='법인및사업자' GROUP BY 나이 ORDER BY 나이").df() 
-gender_data = con.execute(f"SELECT 성별, COUNT(*) AS 건수 FROM df WHERE {where} AND 나이!='법인및사업자' GROUP BY 성별").df() 
+age_data = con.execute(f"SELECT 나이, COUNT(*) AS 건수 FROM raw_data WHERE {where} AND 나이!='법인및사업자' GROUP BY 나이 ORDER BY 나이").df() 
+gender_data = con.execute(f"SELECT 성별, COUNT(*) AS 건수 FROM raw_data WHERE {where} AND 나이!='법인및사업자' GROUP BY 성별").df() 
 if not age_data.empty: 
     c1, c2 = st.columns([4, 2]) 
     with c1: st.plotly_chart(px.bar(age_data, x="건수", y="나이", orientation="h", text_auto=","), use_container_width=True) 
     with c2: st.plotly_chart(px.pie(gender_data, values="건수", names="성별", hole=0.5), use_container_width=True) 
 
+# [4] 연령대별 라인
 st.markdown("<div class='graph-box'><div class='graph-header'><h3>월별 연령대별 추이</h3></div></div>", unsafe_allow_html=True) 
-age_line = con.execute(f"SELECT 연월라벨, 나이, COUNT(*) AS 건수 FROM df WHERE {where} AND 나이!='법인및사업자' GROUP BY 연월번호, 연월라벨, 나이 ORDER BY 연월번호").df() 
+age_line = con.execute(f"SELECT 연월라벨, 나이, COUNT(*) AS 건수 FROM raw_data WHERE {where} AND 나이!='법인및사업자' GROUP BY 연월번호, 연월라벨, 나이 ORDER BY 연월번호").df() 
 if not age_line.empty: 
     st.plotly_chart(px.line(age_line, x="연월라벨", y="건수", color="나이", markers=True), use_container_width=True)
