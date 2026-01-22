@@ -1,5 +1,5 @@
 # =============================================================== 
-# 자동차 이전등록 대시보드 [최종 완결판 - 성능 최적화 및 원문 텍스트 전체 반영]
+# 자동차 이전등록 대시보드 [최종 완결판 - KPI 필터 연동 & 속도 최적화]
 # =============================================================== 
 import duckdb 
 import pandas as pd 
@@ -20,7 +20,7 @@ st.markdown(""" <style>
     h3 { margin:0; font-weight:800; color:#1E1E1E; border:none; } 
 </style> """, unsafe_allow_html=True) 
 
-# 2. 데이터 로드 및 인덱싱 (속도 저하의 근본 원인 해결)
+# 2. 데이터 로드 및 인덱싱 (속도 저하 해결의 핵심)
 @st.cache_resource 
 def get_con(): 
     try: 
@@ -32,14 +32,14 @@ def get_con():
         
         file_list_sql = "[" + ",".join(f"'{str(f.as_posix())}'" for f in files) + "]" 
         
-        # [핵심 최적화] VIEW 대신 TABLE을 생성하고 인덱스를 부여하여 검색 속도 비약적 향상
+        # TABLE 생성 및 인덱스 부여 (필터 클릭 시 즉각 반응하도록 함)
         con.execute(f"""
             CREATE TABLE raw_data AS 
             SELECT *, 년도*100+월 AS 연월번호, 
             CAST(년도 AS VARCHAR)||'-'||LPAD(CAST(월 AS VARCHAR),2,'0') AS 연월라벨 
             FROM read_csv_auto({file_list_sql})
         """)
-        con.execute("CREATE INDEX idx_period_market ON raw_data (연월번호, 중고차시장, 유효시장, 마케팅)")
+        con.execute("CREATE INDEX idx_period ON raw_data (연월번호)")
         return con 
     except: return None 
 
@@ -77,11 +77,12 @@ with f1: start_p = st.selectbox("시작 연월", period_list, format_func=lambda
 with f2: end_p = st.selectbox("종료 연월", period_list, index=len(period_list)-1, format_func=lambda x: period_labels.get(x)) 
 
 if start_p > end_p:
-    st.error("⚠️ 시작 연월이 종료 연월보다 큽니다. 기간을 다시 선택하세요.")
+    st.error("⚠️ 시작 연월이 종료 연월보다 큽니다.")
     st.stop()
 
-# [원문 텍스트 반영] 시장 구분 도움말
-market_help_msg = """**출처: 국토교통부 자료** - **전체**: 국토교통부의 자동차 이전 데이터 전체 
+# [원문 반영] 시장 구분 도움말
+market_help_msg = """**출처: 국토교통부 자료** 
+- **전체**: 국토교통부의 자동차 이전 데이터 전체 
 - **중고차시장**: 이전 데이터 전체 중 개인 간 거래대수를 포함한 사업자 거래대수 (개인거래 + 매도 + 상사이전 + 알선) 
 - **유효시장**: 이전 데이터 전체 중 개인 간 거래대수를 제외한 사업자 거래대수 (매도 + 상사이전 + 알선) 
 - **마케팅**: 마케팅팀이 사전에 정의한 필터링 기준에 따라, 이전등록구분명이 '매매업자거래이전'이며 등록상세명이 '일반소유용'인 이전 등록 건""" 
@@ -89,23 +90,22 @@ market_help_msg = """**출처: 국토교통부 자료** - **전체**: 국토교�
 market_type = st.radio("시장 구분 선택", ["전체","중고차시장","유효시장","마케팅"], horizontal=True, help=market_help_msg) 
 st.markdown("</div>", unsafe_allow_html=True) 
 
-# 4. KPI 계산 최적화 (한 번의 쿼리로 병합)
+# 4. KPI 계산 (필터 변경 시 실시간 반영을 위해 캐시 제거)
 where = f"연월번호 BETWEEN {start_p} AND {end_p}" 
 if market_type != "전체": where += f" AND {market_type}=1" 
 
-@st.cache_data(ttl=3600)
-def get_kpi_data(_where, _end_p, _market_type):
-    # 전체 건수와 중고차시장 건수, 종료월 건수를 통합 조회
-    kpi_res = con.execute(f"""
-        SELECT 
-            COUNT(*) as total,
-            COUNT(CASE WHEN 중고차시장=1 THEN 1 END) as used_cnt,
-            COUNT(CASE WHEN 연월번호={_end_p} THEN 1 END) as end_val
-        FROM raw_data WHERE {_where}
-    """).fetchone()
-    return kpi_res
+def get_kpi_live(_where, _end_p, _market_type):
+    # 기간 누적
+    t_cnt = con.execute(f"SELECT COUNT(*) FROM raw_data WHERE {_where}").fetchone()[0] or 0
+    # 종료월 실적 (시장구분 필터 포함)
+    e_cond = f"연월번호 = {_end_p}"
+    if _market_type != "전체": e_cond += f" AND {_market_type}=1"
+    e_val = con.execute(f"SELECT COUNT(*) FROM raw_data WHERE {e_cond}").fetchone()[0] or 0
+    # 중고차 비중 (선택된 범위 내)
+    u_cnt = con.execute(f"SELECT COUNT(*) FROM raw_data WHERE {_where} AND 중고차시장=1").fetchone()[0] or 0
+    return t_cnt, e_val, u_cnt
 
-total_cnt, used_cnt_total, end_val = get_kpi_data(where, end_p, market_type)
+total_cnt, end_val, used_cnt_total = get_kpi_live(where, end_p, market_type)
 ratio_avg = (used_cnt_total / total_cnt * 100) if total_cnt > 0 else 0
 end_label = period_labels.get(end_p)
 
@@ -114,13 +114,12 @@ with c1: st.markdown(f"<div class='kpi-box'><h4>선택 기간 누적 거래량</
 with c2: st.markdown(f"<div class='kpi-box'><h4>종료월 거래량 ({end_label})</h4><h2>{end_val:,}건</h2></div>", unsafe_allow_html=True) 
 with c3: st.markdown(f"<div class='kpi-box'><h4>중고차 시장 비중 (평균)</h4><h2>{ratio_avg:.1f}%</h2></div>", unsafe_allow_html=True) 
 
-# 5. 엑셀 다운로드
+# 5. 엑셀 다운로드 (파일명 원문 유지)
 if st.button("📥 엑셀 생성 및 다운로드"): 
     try: 
         with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp: 
             path = tmp.name 
             with pd.ExcelWriter(path, engine="xlsxwriter") as w: 
-                # 각 시트 생성
                 con.execute(f"SELECT 연월라벨, 이전등록유형, COUNT(*) AS 건수 FROM raw_data WHERE {where} GROUP BY 연월번호, 연월라벨, 이전등록유형 ORDER BY 연월번호").df().pivot(index="연월라벨", columns="이전등록유형", values="건수").fillna(0).to_excel(w, sheet_name="월별_이전등록유형_건수") 
                 age_gender_m = con.execute(f"SELECT 연월라벨, 나이, 성별, COUNT(*) AS 건수 FROM raw_data WHERE {where} GROUP BY 연월번호, 연월라벨, 나이, 성별 ORDER BY 연월번호").df() 
                 age_gender_m.loc[age_gender_m['나이'] == '법인및사업자', '성별'] = '법인및사업자' 
@@ -128,15 +127,13 @@ if st.button("📥 엑셀 생성 및 다운로드"):
                 con.execute(f"SELECT 연월라벨, 주행거리_범위, COUNT(*) AS 건수 FROM raw_data WHERE {where} GROUP BY 연월번호, 연월라벨, 주행거리_범위 ORDER BY 연월번호").df().pivot(index="연월라벨", columns="주행거리_범위", values="건수").fillna(0).to_excel(w, sheet_name="주행거리_분포") 
                 con.execute(f"SELECT 연월라벨, 취득금액_범위, COUNT(*) AS 건수 FROM raw_data WHERE {where} GROUP BY 연월번호, 연월라벨, 취득금액_범위 ORDER BY 연월번호").df().pivot(index="연월라벨", columns="취득금액_범위", values="건수").fillna(0).to_excel(w, sheet_name="취득금액_분포") 
                 con.execute(f"SELECT 연월라벨, \"시/도\" AS 시도, COUNT(*) AS 건수 FROM raw_data WHERE {where} GROUP BY 연월번호, 연월라벨, \"시/도\" ORDER BY 연월번호").df().pivot(index="연월라벨", columns="시도", values="건수").fillna(0).to_excel(w, sheet_name="지역별_분포") 
-            
             with open(path, "rb") as f: 
-                f_name = f"이전등록_{period_labels.get(start_p)}_{period_labels.get(end_p)}_{market_type}.xlsx"
-                st.download_button("✅ 다운로드 클릭", f, file_name=f_name) 
+                st.download_button("✅ 다운로드 클릭", f, file_name=f"이전등록_{period_labels.get(start_p)}_{period_labels.get(end_p)}_{market_type}.xlsx") 
     except Exception as e: st.error(f"엑셀 생성 실패: {e}") 
 
 # 6. 시각화
-# [원문 텍스트 반영] 이전등록유형 상세 정의
-tooltip_text = """**중고차 거래(이전등록) 유형**
+# [원문 반영] 이전등록유형 툴팁
+tooltip_text = """중고차 거래(이전등록) 유형
 - 1. 매입 : 자동차매매업자가 상품용으로 구매하여 중고차 거래로 등록한 차량
 - 2. 매도 : 자동차매매업자가 자동차 매매업자를 제외한 타인에게 판매하여 중고차 거래로 등록한 차량
 - 3. 상사이전 : 자동차매매업자가 다른 자동차매매업자에게 상품용으로 판매하여 중고차 거래로 등록한 차량
