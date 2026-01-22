@@ -112,7 +112,7 @@ end_label = period_labels.get(end_p)
 c1, c2, c3 = st.columns(3) 
 with c1: st.markdown(f"<div class='kpi-box'><h4>기간 합계 거래량</h4><h2>{total_cnt:,}건</h2></div>", unsafe_allow_html=True) 
 with c2: st.markdown(f"<div class='kpi-box'><h4>{end_label} 거래량</h4><h2>{end_val:,}건</h2></div>", unsafe_allow_html=True) 
-with c3: st.markdown(f"<div class='kpi-box'><h4>기간 중고차시장 비중(평균)</h4><h2>{ratio_avg:.1f}%</h2></div>", unsafe_allow_html=True) 
+with c3: st.markdown(f"<div class='kpi-box'><h4>기간 중고차 시장 비중(평균)</h4><h2>{ratio_avg:.1f}%</h2></div>", unsafe_allow_html=True) 
 
 # 5. 엑셀 다운로드 (파일명 원문 유지)
 if st.button("📥 엑셀 생성 및 다운로드"): 
