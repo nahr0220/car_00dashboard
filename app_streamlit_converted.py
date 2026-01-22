@@ -11,7 +11,7 @@ import tempfile
 import os 
 
 # 1. 페이지 설정 및 디자인
-st.set_page_config(page_title="자동차 이전등록 대시보드", layout="wide") 
+st.set_page_config(page_title="자동차 이전등록 현황 대시보드", layout="wide") 
 st.markdown(""" <style> 
     .stApp { max-width:1200px; margin:0 auto; padding:20px 40px; background:#fff; } 
     .kpi-box { background:#F8F8F8; padding:22px; border-radius:10px; text-align:center; height:150px; display:flex; flex-direction:column; justify-content:center; } 
@@ -69,7 +69,7 @@ periods_df = con.execute('SELECT DISTINCT 연월번호, 연월라벨 FROM raw_da
 period_list = periods_df["연월번호"].tolist()
 period_labels = dict(zip(periods_df["연월번호"], periods_df["연월라벨"])) 
 
-st.markdown("<h1 style='font-size:36px;'>자동차 이전등록 대시보드</h1>", unsafe_allow_html=True) 
+st.markdown("<h1 style='font-size:36px;'>자동차 이전등록 현황 대시보드</h1>", unsafe_allow_html=True) 
 st.markdown('<div class="filter-box">', unsafe_allow_html=True) 
 f1, f2, f3 = st.columns([1, 1, 0.6]) 
 
@@ -110,9 +110,9 @@ ratio_avg = (used_cnt_total / total_cnt * 100) if total_cnt > 0 else 0
 end_label = period_labels.get(end_p)
 
 c1, c2, c3 = st.columns(3) 
-with c1: st.markdown(f"<div class='kpi-box'><h4>선택 기간 누적 거래량</h4><h2>{total_cnt:,}건</h2></div>", unsafe_allow_html=True) 
-with c2: st.markdown(f"<div class='kpi-box'><h4>종료월 거래량 ({end_label})</h4><h2>{end_val:,}건</h2></div>", unsafe_allow_html=True) 
-with c3: st.markdown(f"<div class='kpi-box'><h4>중고차 시장 비중 (평균)</h4><h2>{ratio_avg:.1f}%</h2></div>", unsafe_allow_html=True) 
+with c1: st.markdown(f"<div class='kpi-box'><h4>기간 합계 거래량</h4><h2>{total_cnt:,}건</h2></div>", unsafe_allow_html=True) 
+with c2: st.markdown(f"<div class='kpi-box'><h4>{end_label} 거래량</h4><h2>{end_val:,}건</h2></div>", unsafe_allow_html=True) 
+with c3: st.markdown(f"<div class='kpi-box'><h4>기간 중고차시장 비중(평균)</h4><h2>{ratio_avg:.1f}%</h2></div>", unsafe_allow_html=True) 
 
 # 5. 엑셀 다운로드 (파일명 원문 유지)
 if st.button("📥 엑셀 생성 및 다운로드"): 
