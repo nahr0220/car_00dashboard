@@ -1,5 +1,5 @@
 # =============================================================== 
-# 자동차 이전등록 대시보드 [최종 완결판 - KPI 필터 연동 & 속도 최적화]
+# 자동차 이전등록 대시보드 [최종형 - MoM 색상 및 필터 완벽 연동]
 # =============================================================== 
 import duckdb 
 import pandas as pd 
@@ -20,7 +20,7 @@ st.markdown(""" <style>
     h3 { margin:0; font-weight:800; color:#1E1E1E; border:none; } 
 </style> """, unsafe_allow_html=True) 
 
-# 2. 데이터 로드 및 인덱싱 (속도 저하 해결의 핵심)
+# 2. 데이터 로드 및 인덱싱 (속도 최적화 유지)
 @st.cache_resource 
 def get_con(): 
     try: 
@@ -29,10 +29,7 @@ def get_con():
         base_path = Path(__file__).parent.absolute() / "data" 
         files = sorted(base_path.glob("output_*분기.csv")) 
         if not files: return None 
-        
         file_list_sql = "[" + ",".join(f"'{str(f.as_posix())}'" for f in files) + "]" 
-        
-        # TABLE 생성 및 인덱스 부여 (필터 클릭 시 즉각 반응하도록 함)
         con.execute(f"""
             CREATE TABLE raw_data AS 
             SELECT *, 년도*100+월 AS 연월번호, 
@@ -45,7 +42,6 @@ def get_con():
 
 con = get_con() 
 
-# AP 데이터 로드
 @st.cache_data
 def load_ap_data():
     try: 
@@ -69,7 +65,7 @@ periods_df = con.execute('SELECT DISTINCT 연월번호, 연월라벨 FROM raw_da
 period_list = periods_df["연월번호"].tolist()
 period_labels = dict(zip(periods_df["연월번호"], periods_df["연월라벨"])) 
 
-st.markdown("<h1 style='font-size:36px;'>자동차 이전등록 현황 대시보드</h1>", unsafe_allow_html=True) 
+st.markdown("<h1 style='font-size:36px;'>🚗자동차 이전등록 현황 대시보드</h1>", unsafe_allow_html=True) 
 st.markdown('<div class="filter-box">', unsafe_allow_html=True) 
 f1, f2, f3 = st.columns([1, 1, 0.6]) 
 
@@ -80,9 +76,7 @@ if start_p > end_p:
     st.error("⚠️ 시작 연월이 종료 연월보다 큽니다.")
     st.stop()
 
-# [원문 반영] 시장 구분 도움말
-market_help_msg = """**출처: 국토교통부 자료** 
-- **전체**: 국토교통부의 자동차 이전 데이터 전체 
+market_help_msg = """**출처: 국토교통부 자료** - **전체**: 국토교통부의 자동차 이전 데이터 전체 
 - **중고차시장**: 이전 데이터 전체 중 개인 간 거래대수를 포함한 사업자 거래대수 (개인거래 + 매도 + 상사이전 + 알선) 
 - **유효시장**: 이전 데이터 전체 중 개인 간 거래대수를 제외한 사업자 거래대수 (매도 + 상사이전 + 알선) 
 - **마케팅**: 마케팅팀이 사전에 정의한 필터링 기준에 따라, 이전등록구분명이 '매매업자거래이전'이며 등록상세명이 '일반소유용'인 이전 등록 건""" 
@@ -90,31 +84,46 @@ market_help_msg = """**출처: 국토교통부 자료**
 market_type = st.radio("시장 구분 선택", ["전체","중고차시장","유효시장","마케팅"], horizontal=True, help=market_help_msg) 
 st.markdown("</div>", unsafe_allow_html=True) 
 
-# 4. KPI 계산 (필터 변경 시 실시간 반영을 위해 캐시 제거)
+# 4. KPI 계산 및 MoM 추가
 where = f"연월번호 BETWEEN {start_p} AND {end_p}" 
 if market_type != "전체": where += f" AND {market_type}=1" 
 
 def get_kpi_live(_where, _end_p, _market_type):
-    # 기간 누적
     t_cnt = con.execute(f"SELECT COUNT(*) FROM raw_data WHERE {_where}").fetchone()[0] or 0
-    # 종료월 실적 (시장구분 필터 포함)
     e_cond = f"연월번호 = {_end_p}"
     if _market_type != "전체": e_cond += f" AND {_market_type}=1"
     e_val = con.execute(f"SELECT COUNT(*) FROM raw_data WHERE {e_cond}").fetchone()[0] or 0
-    # 중고차 비중 (선택된 범위 내)
     u_cnt = con.execute(f"SELECT COUNT(*) FROM raw_data WHERE {_where} AND 중고차시장=1").fetchone()[0] or 0
-    return t_cnt, e_val, u_cnt
+    
+    # MoM 계산을 위한 전월 데이터
+    curr_idx = period_list.index(_end_p)
+    mom_text = ""
+    if curr_idx > 0:
+        prev_p = period_list[curr_idx - 1]
+        p_cond = f"연월번호 = {prev_p}"
+        if _market_type != "전체": p_cond += f" AND {_market_type}=1"
+        p_val = con.execute(f"SELECT COUNT(*) FROM raw_data WHERE {p_cond}").fetchone()[0] or 0
+        
+        if p_val > 0:
+            mom_percent = ((e_val - p_val) / p_val) * 100
+            mom_color = "#1E88E5" if mom_percent >= 0 else "#D32F2F" # 상승 파랑, 하락 빨강
+            mom_icon = "▲" if mom_percent >= 0 else "▼"
+            mom_text = f"<span style='color:{mom_color}; font-size:0.55em; margin-left:5px; vertical-align:middle;'>{mom_icon} {abs(mom_percent):.1f}%</span>"
+            
+    return t_cnt, e_val, u_cnt, mom_text
 
-total_cnt, end_val, used_cnt_total = get_kpi_live(where, end_p, market_type)
+total_cnt, end_val, used_cnt_total, mom_text = get_kpi_live(where, end_p, market_type)
 ratio_avg = (used_cnt_total / total_cnt * 100) if total_cnt > 0 else 0
 end_label = period_labels.get(end_p)
 
 c1, c2, c3 = st.columns(3) 
 with c1: st.markdown(f"<div class='kpi-box'><h4>기간 합계 거래량</h4><h2>{total_cnt:,}건</h2></div>", unsafe_allow_html=True) 
-with c2: st.markdown(f"<div class='kpi-box'><h4>{end_label} 거래량</h4><h2>{end_val:,}건</h2></div>", unsafe_allow_html=True) 
-with c3: st.markdown(f"<div class='kpi-box'><h4>기간 중고차 시장 비중</h4><div style='font-size: 0.8em; color: #666; margin-top: -3px;'>(평균)</div><h2>{ratio_avg:.1f}%</h2></div>", unsafe_allow_html=True) 
+with c2: st.markdown(f"<div class='kpi-box'><h4>{end_label} 거래량</h4><h2>{end_val:,}건{mom_text}</h2></div>", unsafe_allow_html=True) 
+with c3: st.markdown(f"<div class='kpi-box'><h4>기간 중고차 시장 비중</h4><div style='font-size: 0.8em; color: #666; margin-top: -5px;'>(평균)</div><h2>{ratio_avg:.1f}%</h2></div>", unsafe_allow_html=True) 
 
-# 5. 엑셀 다운로드 (파일명 원문 유지)
+st.markdown("<hr style='border:1px solid #eee; margin-bottom:30px;'>", unsafe_allow_html=True)
+
+# 5. 엑셀 다운로드 (시장 구분 포함 파일명)
 if st.button("📥 엑셀 생성 및 다운로드"): 
     try: 
         with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp: 
@@ -131,8 +140,7 @@ if st.button("📥 엑셀 생성 및 다운로드"):
                 st.download_button("✅ 다운로드 클릭", f, file_name=f"이전등록_{period_labels.get(start_p)}_{period_labels.get(end_p)}_{market_type}.xlsx") 
     except Exception as e: st.error(f"엑셀 생성 실패: {e}") 
 
-# 6. 시각화
-# [원문 반영] 이전등록유형 툴팁
+# 6. 시각화 (4개 그래프 원복)
 tooltip_text = """중고차 거래(이전등록) 유형
 - 1. 매입 : 자동차매매업자가 상품용으로 구매하여 중고차 거래로 등록한 차량
 - 2. 매도 : 자동차매매업자가 자동차 매매업자를 제외한 타인에게 판매하여 중고차 거래로 등록한 차량
@@ -142,7 +150,6 @@ tooltip_text = """중고차 거래(이전등록) 유형
 - 6. 기타 : 위 유형 외에 상속, 증여, 촉탁 등으로 중고차 거래로 등록한 차량"""
 
 st.markdown(f""" <div class='graph-box'><div class='graph-header' style='display:flex; justify-content:space-between; align-items:center;'><h3>월별 이전등록유형 추이</h3><div title='{tooltip_text}' style='cursor:help; width:22px; height:22px; background:#5B9BD5; color:white; border-radius:50%; text-align:center; line-height:22px; font-weight:bold;'>?</div></div></div> """, unsafe_allow_html=True)
-
 g1 = con.execute(f"SELECT 연월라벨, 이전등록유형, COUNT(*) AS 건수 FROM raw_data WHERE {where} GROUP BY 연월번호, 연월라벨, 이전등록유형 ORDER BY 연월번호").df() 
 if not g1.empty:
     g_total = g1.groupby("연월라벨")["건수"].sum().reset_index() 
@@ -155,7 +162,6 @@ if not g1.empty:
     fig1.update_layout(yaxis=dict(tickformat=","), margin=dict(t=20)) 
     st.plotly_chart(fig1, use_container_width=True)
 
-# [2] AP 추이
 st.markdown("<div class='graph-box'><div class='graph-header'><h3>AP 판매 추이 및 유효시장 점유율</h3></div></div>", unsafe_allow_html=True) 
 valid_m = con.execute(f"SELECT 연월번호, 연월라벨, COUNT(*) AS 유효시장건수 FROM raw_data WHERE {where} AND 유효시장=1 GROUP BY 연월번호, 연월라벨").df() 
 df_ap_m = pd.merge(df_ap[(df_ap["연월번호"]>=start_p)&(df_ap["연월번호"]<=end_p)], valid_m, on=["연월번호","연월라벨"], how="inner") 
@@ -170,16 +176,14 @@ if not df_ap_m.empty:
     fig_ap.update_layout(yaxis=dict(tickformat=",", dtick=1000), margin=dict(t=50, b=50)) 
     st.plotly_chart(fig_ap, use_container_width=True) 
 
-# [3] 연령성별
 st.markdown("<div class='graph-box'><div class='graph-header'><h3>연령·성별 현황</h3></div></div>", unsafe_allow_html=True) 
 age_data = con.execute(f"SELECT 나이, COUNT(*) AS 건수 FROM raw_data WHERE {where} AND 나이!='법인및사업자' GROUP BY 나이 ORDER BY 나이").df() 
 gender_data = con.execute(f"SELECT 성별, COUNT(*) AS 건수 FROM raw_data WHERE {where} AND 나이!='법인및사업자' GROUP BY 성별").df() 
 if not age_data.empty: 
-    c1, c2 = st.columns([4, 2]) 
-    with c1: st.plotly_chart(px.bar(age_data, x="건수", y="나이", orientation="h", text_auto=","), use_container_width=True) 
-    with c2: st.plotly_chart(px.pie(gender_data, values="건수", names="성별", hole=0.5), use_container_width=True) 
+    c1_g, c2_g = st.columns([4, 2]) 
+    with c1_g: st.plotly_chart(px.bar(age_data, x="건수", y="나이", orientation="h", text_auto=","), use_container_width=True) 
+    with c2_g: st.plotly_chart(px.pie(gender_data, values="건수", names="성별", hole=0.5), use_container_width=True) 
 
-# [4] 연령대별 라인
 st.markdown("<div class='graph-box'><div class='graph-header'><h3>월별 연령대별 추이</h3></div></div>", unsafe_allow_html=True) 
 age_line = con.execute(f"SELECT 연월라벨, 나이, COUNT(*) AS 건수 FROM raw_data WHERE {where} AND 나이!='법인및사업자' GROUP BY 연월번호, 연월라벨, 나이 ORDER BY 연월번호").df() 
 if not age_line.empty: 
