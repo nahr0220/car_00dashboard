@@ -1,8 +1,11 @@
 name: Wake up Streamlit
+
 on:
   schedule:
-    - cron: '0 23 * * *' # 한국 시간 아침 7시 (UTC 22:00)
-  workflow_dispatch: # 직접 버튼을 눌러서 실행해볼 수도 있게 하는 옵션
+    # 한국 시간(KST) 오전 8시 00분 실행 (UTC 기준 23:00)
+    - cron: '0 23 * * *'
+  workflow_dispatch: # 직접 실행 버튼 활성화
+
 jobs:
   ping:
     runs-on: ubuntu-latest
