@@ -4,7 +4,7 @@ on:
   schedule:
     # 한국 시간(KST) 오전 8시 00분 실행 (UTC 기준 23:00)
     - cron: '0 23 * * *'
-  workflow_dispatch: # 직접 실행 버튼 활성화
+  workflow_dispatch:
 
 jobs:
   ping:
