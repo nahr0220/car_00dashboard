@@ -1,0 +1,14 @@
+name: Wake up Streamlit
+
+on:
+  schedule:
+    # 한국 시간(KST) 오전 8시 00분 실행 (UTC 기준 23:00)
+    - cron: '0 23 * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Streamlit App
+        run: curl -I https://car00dashboard-5hhnyi4bnkflnkqbzsx5vw.streamlit.app
