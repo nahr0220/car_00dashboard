@@ -46,6 +46,7 @@ con = get_con()
 def load_ap_data():
     try: 
         df_ap = pd.read_excel("data/AP Sales Summary.xlsx", skiprows=1) 
+        df_ap.loc[len(df_ap)] = [2026, 1, 12345]
         df_ap.columns = ["년도","월","AP"] 
         df_ap = df_ap[df_ap["년도"]>=2024] 
         df_ap["연월번호"] = df_ap["년도"]*100+df_ap["월"] 
