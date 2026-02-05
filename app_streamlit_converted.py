@@ -46,7 +46,7 @@ con = get_con()
 def load_ap_data():
     try: 
         df_ap = pd.read_excel("data/AP Sales Summary.xlsx", skiprows=1) 
-        df_ap.loc[len(df_ap)] = [2026, 1, 12345]
+        df_ap.loc[len(df_ap)] = [2026, 1, 1897]
         df_ap.columns = ["년도","월","AP"] 
         df_ap = df_ap[df_ap["년도"]>=2024] 
         df_ap["연월번호"] = df_ap["년도"]*100+df_ap["월"] 
@@ -108,7 +108,7 @@ def get_kpi_live(_where, _end_p, _market_type):
         
         if p_val > 0:
             mom_percent = ((e_val - p_val) / p_val) * 100
-            mom_color = "#1E88E5" if mom_percent >= 0 else "#D32F2F" # 상승 파랑, 하락 빨강
+            mom_color = "#D32F2F" if mom_percent >= 0 else "#1E88E5" # 상승 빨강, 하락 파랑
             mom_icon = "▲" if mom_percent >= 0 else "▼"
             mom_text = f"<span style='color:{mom_color}; font-size:0.55em; margin-left:5px; vertical-align:middle;'>{mom_icon} {abs(mom_percent):.1f}%</span>"
             
