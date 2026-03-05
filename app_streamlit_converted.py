@@ -189,6 +189,7 @@ age_line = con.execute(f"SELECT 연월라벨, 나이, COUNT(*) AS 건수 FROM ra
 if not age_line.empty: 
     st.plotly_chart(px.line(age_line, x="연월라벨", y="건수", color="나이", markers=True), use_container_width=True)
 
+
 # --- [수정] 7. 신규등록 현황 (공공데이터) ---
 @st.cache_data
 def load_new_reg_data():
@@ -205,14 +206,19 @@ df_new = load_new_reg_data()
 # 필터 범위(start_p ~ end_p) 내 데이터만 추출
 df_new_filtered = df_new[(df_new["연월번호"] >= start_p) & (df_new["연월번호"] <= end_p)]
 
-st.markdown("<div class='graph-box'><div class='graph-header'><h3>월별 신규등록 현황</h3></div></div>", unsafe_allow_html=True)
+st.markdown(
+    "<hr style='border:2px solid #D0D0D0; margin:45px 0 30px 0;'>",
+    unsafe_allow_html=True
+)
+
+st.markdown("<div class='graph-box'><div class='graph-header'><h3>추가 지표) 월별 신규등록 현황</h3></div></div>", unsafe_allow_html=True)
 
 if not df_new_filtered.empty:
     # 1. 막대그래프용 데이터 (연월별 전체 합계)
     df_new_total = df_new_filtered.groupby("연월라벨")["건수"].sum().reset_index()
     
     fig_new = go.Figure()
-
+    
     # 전체 합계 막대 그래프 (숫자 크기 키우기 설정 포함)
     fig_new.add_bar(
     x=df_new_total["연월라벨"],
@@ -244,8 +250,8 @@ if not df_new_filtered.empty:
         )
 
     fig_new.update_layout(
-        yaxis=dict(tickformat=",", title="등록 건수"),
-        xaxis=dict(title="연월"),
+        yaxis=dict(tickformat=","),
+        xaxis=dict(),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         margin=dict(t=100, b=50),
         hovermode="closest" # 마우스를 올리면 해당 시점의 모든 데이터가 보임
