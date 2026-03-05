@@ -188,7 +188,3 @@ st.markdown("<div class='graph-box'><div class='graph-header'><h3>월별 연령�
 age_line = con.execute(f"SELECT 연월라벨, 나이, COUNT(*) AS 건수 FROM raw_data WHERE {where} AND 나이!='법인및사업자' GROUP BY 연월번호, 연월라벨, 나이 ORDER BY 연월번호").df() 
 if not age_line.empty: 
     st.plotly_chart(px.line(age_line, x="연월라벨", y="건수", color="나이", markers=True), use_container_width=True)
-
-
-
-st.markdown()
