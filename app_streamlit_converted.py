@@ -188,3 +188,69 @@ st.markdown("<div class='graph-box'><div class='graph-header'><h3>월별 연령�
 age_line = con.execute(f"SELECT 연월라벨, 나이, COUNT(*) AS 건수 FROM raw_data WHERE {where} AND 나이!='법인및사업자' GROUP BY 연월번호, 연월라벨, 나이 ORDER BY 연월번호").df() 
 if not age_line.empty: 
     st.plotly_chart(px.line(age_line, x="연월라벨", y="건수", color="나이", markers=True), use_container_width=True)
+
+# --- [수정] 7. 신규등록 현황 (공공데이터) ---
+@st.cache_data
+def load_new_reg_data():
+    try:
+        df_new = pd.read_excel("data/공공데이터신규데이터.xlsx")
+        df_new["연월번호"] = df_new["년도"] * 100 + df_new["월"]
+        df_new["연월라벨"] = df_new["년도"].astype(str) + "-" + df_new["월"].astype(str).str.zfill(2)
+        return df_new
+    except:
+        return pd.DataFrame(columns=["년도", "월", "회원구분명", "건수", "연월번호", "연월라벨"])
+
+df_new = load_new_reg_data()
+
+# 필터 범위(start_p ~ end_p) 내 데이터만 추출
+df_new_filtered = df_new[(df_new["연월번호"] >= start_p) & (df_new["연월번호"] <= end_p)]
+
+st.markdown("<div class='graph-box'><div class='graph-header'><h3>월별 신규등록 현황</h3></div></div>", unsafe_allow_html=True)
+
+if not df_new_filtered.empty:
+    # 1. 막대그래프용 데이터 (연월별 전체 합계)
+    df_new_total = df_new_filtered.groupby("연월라벨")["건수"].sum().reset_index()
+    
+    fig_new = go.Figure()
+
+    # 전체 합계 막대 그래프 (숫자 크기 키우기 설정 포함)
+    fig_new.add_bar(
+    x=df_new_total["연월라벨"],
+    y=df_new_total["건수"],
+    name="전체 신규합계",
+    marker_color="#D1D9E6",
+    opacity=0.6
+    )
+
+    fig_new.add_scatter(
+    x=df_new_total["연월라벨"],
+    y=df_new_total["건수"] * 1.05,
+    mode="text",
+    text=df_new_total["건수"],
+    texttemplate="<b>%{text:,}</b>",
+    textfont=dict(size=10, color="#888888"),
+    showlegend=False
+    )
+
+    # 2. 꺾은선 그래프용 데이터 (회원구분명별 - 숫자 라벨 제거)
+    for member_type in df_new_filtered["회원구분명"].unique():
+        d = df_new_filtered[df_new_filtered["회원구분명"] == member_type]
+        fig_new.add_scatter(
+            x=d["연월라벨"], 
+            y=d["건수"], 
+            mode="lines+markers", # 'text' 제거하여 숫자 표시 안 함
+            name=member_type,
+            hovertemplate="<b>" + member_type + "</b><br>연월: %{x}<br>건수: %{y:,}건<extra></extra>"
+        )
+
+    fig_new.update_layout(
+        yaxis=dict(tickformat=",", title="등록 건수"),
+        xaxis=dict(title="연월"),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        margin=dict(t=100, b=50),
+        hovermode="closest" # 마우스를 올리면 해당 시점의 모든 데이터가 보임
+    )
+    
+    st.plotly_chart(fig_new, use_container_width=True)
+else:
+    st.warning("데이터가 없거나 파일 경로를 확인해주세요.")
