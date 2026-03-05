@@ -45,9 +45,7 @@ con = get_con()
 @st.cache_data
 def load_ap_data():
     try: 
-        df_ap = pd.read_excel("data/AP Sales Summary.xlsx", skiprows=1) 
-        df_ap.loc[len(df_ap)] = [2026, 1, 1894]
-        df_ap.columns = ["년도","월","AP"] 
+        df_ap = pd.read_excel("data/AP Sales Summary.xlsx") 
         df_ap = df_ap[df_ap["년도"]>=2024] 
         df_ap["연월번호"] = df_ap["년도"]*100+df_ap["월"] 
         df_ap["연월라벨"] = df_ap["년도"].astype(str)+"-"+df_ap["월"].astype(str).str.zfill(2) 
@@ -190,3 +188,7 @@ st.markdown("<div class='graph-box'><div class='graph-header'><h3>월별 연령�
 age_line = con.execute(f"SELECT 연월라벨, 나이, COUNT(*) AS 건수 FROM raw_data WHERE {where} AND 나이!='법인및사업자' GROUP BY 연월번호, 연월라벨, 나이 ORDER BY 연월번호").df() 
 if not age_line.empty: 
     st.plotly_chart(px.line(age_line, x="연월라벨", y="건수", color="나이", markers=True), use_container_width=True)
+
+
+
+st.markdown()
