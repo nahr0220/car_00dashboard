@@ -199,7 +199,7 @@ def load_new_reg_data():
         df_new["연월라벨"] = df_new["년도"].astype(str) + "-" + df_new["월"].astype(str).str.zfill(2)
         return df_new
     except:
-        return pd.DataFrame(columns=["년도", "월", "회원구분명", "건수", "연월번호", "연월라벨"])
+        return pd.DataFrame(columns=["년도", "월", "신청구분명", "건수", "연월번호", "연월라벨"])
 
 df_new = load_new_reg_data()
 
