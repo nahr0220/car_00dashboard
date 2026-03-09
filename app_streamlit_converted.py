@@ -238,9 +238,9 @@ if not df_new_filtered.empty:
     showlegend=False
     )
 
-    # 2. 꺾은선 그래프용 데이터 (회원구분명별 - 숫자 라벨 제거)
-    for member_type in df_new_filtered["회원구분명"].unique():
-        d = df_new_filtered[df_new_filtered["회원구분명"] == member_type]
+    # 2. 꺾은선 그래프용 데이터 (신청구분명 - 숫자 라벨 제거)
+    for member_type in df_new_filtered["신청구분명"].unique():
+        d = df_new_filtered[df_new_filtered["신청구분명"] == member_type]
         fig_new.add_scatter(
             x=d["연월라벨"], 
             y=d["건수"], 
